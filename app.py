@@ -605,7 +605,6 @@ with tab4:
         
         ai_title = st.text_input(
             "Stellentitel",
-<<<<<<< HEAD
             value=st.session_state.selected_job_for_ai.get("title", "") if st.session_state.selected_job_for_ai else "",
             key="ai_title_input"
         )
@@ -618,17 +617,6 @@ with tab4:
             "URL (optional, für automatisches Laden)",
             value=st.session_state.selected_job_for_ai.get("url", "") if st.session_state.selected_job_for_ai else "",
             key="ai_url_input"
-=======
-            value=st.session_state.selected_job_for_ai.get("title", "") if st.session_state.selected_job_for_ai else ""
-        )
-        ai_company = st.text_input(
-            "Unternehmen",
-            value=st.session_state.selected_job_for_ai.get("company", "") if st.session_state.selected_job_for_ai else ""
-        )
-        ai_url = st.text_input(
-            "URL (optional, für automatisches Laden)",
-            value=st.session_state.selected_job_for_ai.get("url", "") if st.session_state.selected_job_for_ai else ""
->>>>>>> 871c267af1816cba5352f8e680422e630667b70b
         )
         
         if ai_url and st.button("📥 Stellenbeschreibung laden"):
