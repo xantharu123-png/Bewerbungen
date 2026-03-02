@@ -42,12 +42,19 @@ def _restore_documents_from_drive(db_data: dict):
     for doc_type, doc_info in docs.items():
         filename = doc_info.get("filename", "")
         if filename:
+            filepath = DOCS_PATH / filename
+            # Skip if file already exists locally
+            if filepath.exists() and filepath.stat().st_size > 0:
+                continue
             content = download_file(f"docs/{filename}")
             if content:
-                filepath = DOCS_PATH / filename
                 with open(filepath, "wb") as f:
                     f.write(content)
+                # Fix path in DB to match local path
+                doc_info["path"] = str(filepath)
                 print(f"[DB] Restored document: {filename}")
+            else:
+                print(f"[DB] WARNING: Could not restore {filename} from Drive")
 
 
 def save_db_local(data: dict):
@@ -145,7 +152,29 @@ def save_document(name: str, content: bytes, doc_type: str):
 
 
 def get_document(doc_type: str) -> dict | None:
-    return load_db().get("documents", {}).get(doc_type)
+    """Get document info. Re-downloads from Drive if local file is missing."""
+    doc_info = load_db().get("documents", {}).get(doc_type)
+    if not doc_info:
+        return None
+
+    filepath = Path(doc_info.get("path", ""))
+    filename = doc_info.get("filename", "")
+
+    # If local file missing, try to restore from Drive
+    if not filepath.exists() or filepath.stat().st_size == 0:
+        if is_drive_available() and filename:
+            content = download_file(f"docs/{filename}")
+            if content:
+                DOCS_PATH.mkdir(parents=True, exist_ok=True)
+                local_path = DOCS_PATH / filename
+                with open(local_path, "wb") as f:
+                    f.write(content)
+                doc_info["path"] = str(local_path)
+                print(f"[DB] Re-downloaded document: {filename}")
+                return doc_info
+        return None  # File truly missing
+
+    return doc_info
 
 
 STATUS_OPTIONS = [

@@ -296,9 +296,9 @@ with st.sidebar:
 
     # Drive sync status
     if is_drive_available():
-        st.caption("☁️ Google Drive verbunden")
+        st.caption("☁️ Google Drive verbunden — Daten bleiben erhalten")
     else:
-        st.caption("💾 Lokaler Speicher")
+        st.caption("⚠️ Kein Google Drive — Daten gehen bei Redeploy verloren!")
 
     st.markdown("---")
 

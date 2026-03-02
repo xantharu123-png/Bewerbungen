@@ -57,12 +57,26 @@ def _load_credentials():
             except json.JSONDecodeError:
                 pass
 
-    # 3. Try local file
+    # 3. Try local files (multiple locations)
     if not creds_json:
-        local_path = Path("data/service_account.json")
-        if local_path.exists():
-            with open(local_path, "r") as f:
-                creds_json = json.load(f)
+        possible_paths = [
+            Path("data/service_account.json"),
+            Path("bewerbungen-489007-58c2a2254a41.json"),
+            *Path(".").glob("*service*account*.json"),
+            *Path(".").glob("*bewerbungen*.json"),
+        ]
+        for local_path in possible_paths:
+            if local_path.exists():
+                try:
+                    with open(local_path, "r") as f:
+                        creds_json = json.load(f)
+                    if creds_json.get("type") == "service_account":
+                        print(f"[Drive] Loaded credentials from {local_path}")
+                        break
+                    else:
+                        creds_json = None
+                except (json.JSONDecodeError, KeyError):
+                    creds_json = None
 
     if not creds_json:
         return None
