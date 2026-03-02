@@ -696,77 +696,128 @@ with tab3:
 # ═══════════════════════════════════════════
 with tab4:
     st.markdown("## 🤖 KI-Anschreiben Generator")
-    
+
     settings = get_settings()
-    
-    # Pre-fill from selected job in tracker
+
+    # ── Job selection: dropdown from saved jobs ──
+    all_jobs = get_jobs()
+    job_options = {f"{j['title']} — {j.get('company', '?')} ({j.get('location', '?')})": j for j in all_jobs}
+
+    if not all_jobs:
+        st.warning("⚠️ Noch keine Stellen gespeichert. Speichere zuerst Stellen über die Stellensuche (Tab 1).")
+
+    # Determine default index if a job was pre-selected from tracker
+    default_idx = 0
     if st.session_state.selected_job_for_ai:
-        sel = st.session_state.selected_job_for_ai
-        st.info(f"📌 Ausgewählte Stelle: **{sel['title']}** bei {sel.get('company', '–')}")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 📝 Stellenangaben")
-        
-        ai_title = st.text_input(
-            "Stellentitel",
-            value=st.session_state.selected_job_for_ai.get("title", "") if st.session_state.selected_job_for_ai else "",
-            key="ai_title_input"
-        )
-        ai_company = st.text_input(
-            "Unternehmen",
-            value=st.session_state.selected_job_for_ai.get("company", "") if st.session_state.selected_job_for_ai else "",
-            key="ai_company_input"
-        )
-        ai_url = st.text_input(
-            "URL (optional, für automatisches Laden)",
-            value=st.session_state.selected_job_for_ai.get("url", "") if st.session_state.selected_job_for_ai else "",
-            key="ai_url_input"
-        )
-        
-        if ai_url and st.button("📥 Stellenbeschreibung laden"):
-            with st.spinner("Lade Inserat..."):
-                details = get_job_details(ai_url)
-                if details.get("description"):
-                    st.session_state["ai_job_desc"] = details["description"]
-                    if details.get("company"):
-                        st.session_state["ai_company"] = details["company"]
-                    st.success("Geladen!")
-                else:
-                    st.warning("Konnte Beschreibung nicht laden.")
-        
-        ai_job_desc = st.text_area(
-            "Stellenbeschreibung",
-            value=st.session_state.get("ai_job_desc", ""),
-            height=200,
-            placeholder="Füge hier die Stellenbeschreibung ein..."
-        )
-    
-    with col2:
-        st.markdown("### 📋 Dein Profil")
-        
+        sel_id = st.session_state.selected_job_for_ai.get("id")
+        for idx, (label, j) in enumerate(job_options.items()):
+            if j.get("id") == sel_id:
+                default_idx = idx
+                break
+
+    selected_label = st.selectbox(
+        "📌 Stelle auswählen",
+        options=list(job_options.keys()) if job_options else ["Keine Stellen vorhanden"],
+        index=default_idx,
+        help="Wähle eine gespeicherte Stelle — Titel, Firma und Beschreibung werden automatisch geladen.",
+        key="ai_job_select"
+    )
+
+    selected_job = job_options.get(selected_label)
+
+    # Auto-load job details when a job is selected
+    if selected_job:
+        ai_title = selected_job.get("title", "")
+        ai_company = selected_job.get("company", "")
+        ai_url = selected_job.get("url", "")
+
+        # Show selected job info
+        st.markdown(f"""
+        <div class="job-card">
+            <div class="job-title">{ai_title}</div>
+            <div class="job-meta">
+                <span class="job-company">{ai_company or '–'}</span>
+                {"&nbsp;&nbsp;📍 " + selected_job.get('location', '') if selected_job.get('location') else ""}
+                {"&nbsp;&nbsp;⏱️ " + selected_job.get('pensum', '') if selected_job.get('pensum') else ""}
+                {"&nbsp;&nbsp;🔗 <a href='" + ai_url + "' target='_blank' style='color:#4a9eff;'>Zum Inserat</a>" if ai_url else ""}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Auto-fetch job description if not already loaded for this job
+        job_desc_key = f"ai_job_desc_{selected_job.get('id', '')}"
+        if job_desc_key not in st.session_state:
+            # Try to use stored description first
+            if selected_job.get("description"):
+                st.session_state[job_desc_key] = selected_job["description"]
+            elif ai_url:
+                with st.spinner("📥 Lade Stellenbeschreibung von jobs.ch..."):
+                    details = get_job_details(ai_url)
+                    if details.get("description"):
+                        st.session_state[job_desc_key] = details["description"]
+                        # Also update company if we got a better one
+                        if details.get("company") and not ai_company:
+                            ai_company = details["company"]
+                    else:
+                        st.session_state[job_desc_key] = ""
+
+        ai_job_desc = st.session_state.get(job_desc_key, "")
+
+        # Show description (editable for manual adjustments)
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("### 📝 Stellenbeschreibung")
+            if ai_job_desc:
+                st.caption(f"✅ {len(ai_job_desc)} Zeichen automatisch geladen")
+            ai_job_desc = st.text_area(
+                "Beschreibung (automatisch geladen, editierbar)",
+                value=ai_job_desc,
+                height=250,
+                key="ai_desc_textarea",
+                placeholder="Wird automatisch von jobs.ch geladen..."
+            )
+            if st.button("🔄 Beschreibung neu laden", key="reload_desc"):
+                if ai_url:
+                    with st.spinner("Lade..."):
+                        details = get_job_details(ai_url)
+                        if details.get("description"):
+                            st.session_state[job_desc_key] = details["description"]
+                            st.rerun()
+
+        with col2:
+            st.markdown("### 📋 Dein Profil")
+
+            cv_available = bool(st.session_state.cv_text)
+            if cv_available:
+                st.success("✅ CV geladen (aus Tab 'Unterlagen')")
+            else:
+                st.warning("⚠️ Kein CV geladen – bitte zuerst in Tab 'Unterlagen' hochladen")
+
+            letter_available = bool(st.session_state.cover_letter_text)
+            if letter_available:
+                st.success("✅ Muster-Anschreiben geladen (Stil wird übernommen)")
+
+            ai_extra_info = st.text_area(
+                "Zusätzliche Infos (optional)",
+                height=100,
+                placeholder="z.B. spezifische Motivationen, besondere Punkte...",
+                key="ai_extra_info_input"
+            )
+
+            ai_language = st.radio("Sprache", ["Deutsch", "English"], horizontal=True, key="ai_lang_radio")
+            lang_code = "de" if ai_language == "Deutsch" else "en"
+    else:
+        ai_title = ""
+        ai_company = ""
+        ai_job_desc = ""
+        ai_url = ""
         cv_available = bool(st.session_state.cv_text)
-        if cv_available:
-            st.success("✅ CV geladen (aus Tab 'Unterlagen')")
-        else:
-            st.warning("⚠️ Kein CV geladen – bitte zuerst in Tab 'Unterlagen' hochladen")
-        
-        letter_available = bool(st.session_state.cover_letter_text)
-        if letter_available:
-            st.success("✅ Muster-Anschreiben geladen (Stil wird übernommen)")
-        
-        ai_extra_info = st.text_area(
-            "Zusätzliche Infos (optional)",
-            height=100,
-            placeholder="z.B. spezifische Motivationen, besondere Punkte die hervorgehoben werden sollen..."
-        )
-        
-        ai_language = st.radio("Sprache", ["Deutsch", "English"], horizontal=True)
-        lang_code = "de" if ai_language == "Deutsch" else "en"
-    
+        ai_extra_info = ""
+        lang_code = "de"
+
     col_gen, col_score = st.columns(2)
-    
+
     with col_gen:
         generate_btn = st.button(
             "✍️ Anschreiben generieren",
@@ -774,7 +825,7 @@ with tab4:
             use_container_width=True,
             disabled=not (ai_title and ai_job_desc and cv_available)
         )
-    
+
     with col_score:
         score_btn = st.button(
             "🎯 Match-Score berechnen",
@@ -812,8 +863,8 @@ with tab4:
                 st.session_state["score_result"] = score_result
                 
                 # Save score to job if selected
-                if st.session_state.selected_job_for_ai:
-                    update_job(st.session_state.selected_job_for_ai["id"], {
+                if selected_job:
+                    update_job(selected_job["id"], {
                         "match_score": score_result.get("score", 0)
                     })
             except Exception as e:
@@ -871,8 +922,8 @@ with tab4:
                 use_container_width=True
             )
         with col_save:
-            if st.session_state.selected_job_for_ai and st.button("💾 In Stelle speichern", use_container_width=True):
-                update_job(st.session_state.selected_job_for_ai["id"], {
+            if selected_job and st.button("💾 In Stelle speichern", use_container_width=True):
+                update_job(selected_job["id"], {
                     "cover_letter": letter_text,
                     "status": "Interessant"
                 })
