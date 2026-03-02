@@ -881,82 +881,94 @@ with tab3:
         except:
             pass
 
-    # ── Status overview ──
-    docs_info = [
-        ("Lebenslauf", cv_doc),
-        ("Muster-Anschreiben", letter_doc),
-        ("Diplome & Zertifikate", diplom_doc),
-        ("Arbeitszeugnisse", zeugnis_doc),
+    # ── Document list: clean, compact rows ──
+    docs_config = [
+        {"key": "cv", "label": "Lebenslauf", "icon": "📋", "doc": cv_doc, "types": ["pdf", "docx"], "hint": "PDF oder DOCX"},
+        {"key": "cover_letter", "label": "Muster-Anschreiben", "icon": "✉️", "doc": letter_doc, "types": ["pdf", "docx"], "hint": "PDF oder DOCX"},
+        {"key": "diplome", "label": "Diplome & Zertifikate", "icon": "🎓", "doc": diplom_doc, "types": ["pdf"], "hint": "Alle Diplome als ein PDF"},
+        {"key": "zeugnisse", "label": "Arbeitszeugnisse", "icon": "📝", "doc": zeugnis_doc, "types": ["pdf"], "hint": "Alle Zeugnisse als ein PDF"},
     ]
 
-    status_html = '<div style="background:#ffffff;border:1px solid #e5ddd0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.04);"><div style="display:flex;gap:24px;flex-wrap:wrap;">'
-    for label, doc in docs_info:
-        color = "#16a34a" if doc else "#dc2626"
-        name = doc['filename'] if doc else "Nicht hochgeladen"
-        status_html += f'<div style="flex:1;min-width:130px;"><div style="color:#7a6b56;font-size:0.78rem;margin-bottom:4px;">{label}</div><div style="color:{color};font-weight:600;font-size:0.88rem;">{name}</div></div>'
-    status_html += '</div></div>'
-    st.markdown(status_html, unsafe_allow_html=True)
+    # Count uploaded
+    uploaded_count = sum(1 for d in docs_config if d["doc"])
+    st.markdown(
+        f'<div style="background:#ffffff;border:1px solid #e5ddd0;border-radius:10px;padding:14px 20px;margin-bottom:16px;'
+        f'box-shadow:0 1px 3px rgba(0,0,0,0.04);display:flex;align-items:center;gap:12px;">'
+        f'<span style="font-size:1.3rem;">📂</span>'
+        f'<span style="color:#2d2417;font-weight:600;">{uploaded_count} von 4 Dokumenten hochgeladen</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
-    # ── Upload sections ──
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("##### 📋 Lebenslauf hochladen")
-        cv_file = st.file_uploader(
-            "CV als PDF oder DOCX",
-            type=["pdf", "docx"],
-            key="cv_upload",
-        )
-        if cv_file:
-            content = cv_file.read()
-            save_document(cv_file.name, content, "cv")
-            if cv_file.name.endswith(".pdf"):
-                st.session_state.cv_text = extract_text_from_pdf(content)
-            else:
-                st.session_state.cv_text = extract_text_from_docx(content)
-            st.success(f"'{cv_file.name}' gespeichert!")
-
-    with col2:
-        st.markdown("##### ✉️ Muster-Anschreiben hochladen")
-        letter_file = st.file_uploader(
-            "Anschreiben als PDF oder DOCX",
-            type=["pdf", "docx"],
-            key="letter_upload",
-        )
-        if letter_file:
-            content = letter_file.read()
-            save_document(letter_file.name, content, "cover_letter")
-            if letter_file.name.endswith(".pdf"):
-                st.session_state.cover_letter_text = extract_text_from_pdf(content)
-            else:
-                st.session_state.cover_letter_text = extract_text_from_docx(content)
-            st.success(f"'{letter_file.name}' gespeichert!")
-
-    col3, col4 = st.columns(2)
-
-    with col3:
-        st.markdown("##### 🎓 Diplome & Zertifikate hochladen")
-        diplom_file = st.file_uploader(
-            "Alle Diplome als ein PDF",
-            type=["pdf"],
-            key="diplom_upload",
-        )
-        if diplom_file:
-            content = diplom_file.read()
-            save_document(diplom_file.name, content, "diplome")
-            st.success(f"'{diplom_file.name}' gespeichert!")
-
-    with col4:
-        st.markdown("##### 📝 Arbeitszeugnisse hochladen")
-        zeugnis_file = st.file_uploader(
-            "Alle Arbeitszeugnisse als ein PDF",
-            type=["pdf"],
-            key="zeugnis_upload",
-        )
-        if zeugnis_file:
-            content = zeugnis_file.read()
-            save_document(zeugnis_file.name, content, "zeugnisse")
-            st.success(f"'{zeugnis_file.name}' gespeichert!")
+    for cfg in docs_config:
+        doc = cfg["doc"]
+        if doc:
+            # ── Document already uploaded: show compact row ──
+            st.markdown(
+                f'<div style="background:#ffffff;border:1px solid #e5ddd0;border-radius:10px;padding:12px 18px;margin-bottom:8px;'
+                f'display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 2px rgba(0,0,0,0.03);">'
+                f'<div style="display:flex;align-items:center;gap:10px;">'
+                f'<span style="font-size:1.1rem;">{cfg["icon"]}</span>'
+                f'<div>'
+                f'<div style="color:#2d2417;font-weight:600;font-size:0.92rem;">{cfg["label"]}</div>'
+                f'<div style="color:#16a34a;font-size:0.82rem;">{doc["filename"]}</div>'
+                f'</div></div>'
+                f'<span style="color:#16a34a;font-size:1.1rem;">✓</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            # Expander to replace the file
+            with st.expander(f"🔄 {cfg['label']} ersetzen", expanded=False):
+                new_file = st.file_uploader(
+                    f"Neue Datei für {cfg['label']}",
+                    type=cfg["types"],
+                    key=f"{cfg['key']}_replace",
+                )
+                if new_file:
+                    content = new_file.read()
+                    save_document(new_file.name, content, cfg["key"])
+                    if cfg["key"] == "cv":
+                        if new_file.name.endswith(".pdf"):
+                            st.session_state.cv_text = extract_text_from_pdf(content)
+                        else:
+                            st.session_state.cv_text = extract_text_from_docx(content)
+                    elif cfg["key"] == "cover_letter":
+                        if new_file.name.endswith(".pdf"):
+                            st.session_state.cover_letter_text = extract_text_from_pdf(content)
+                        else:
+                            st.session_state.cover_letter_text = extract_text_from_docx(content)
+                    st.success(f"'{new_file.name}' aktualisiert!")
+        else:
+            # ── Document not yet uploaded: show upload area ──
+            st.markdown(
+                f'<div style="background:#fff8f0;border:1px dashed #d4c4ae;border-radius:10px;padding:12px 18px;margin-bottom:4px;'
+                f'display:flex;align-items:center;gap:10px;">'
+                f'<span style="font-size:1.1rem;">{cfg["icon"]}</span>'
+                f'<div>'
+                f'<div style="color:#2d2417;font-weight:600;font-size:0.92rem;">{cfg["label"]}</div>'
+                f'<div style="color:#a0917d;font-size:0.82rem;">Noch nicht hochgeladen</div>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+            new_file = st.file_uploader(
+                cfg["hint"],
+                type=cfg["types"],
+                key=f"{cfg['key']}_upload",
+            )
+            if new_file:
+                content = new_file.read()
+                save_document(new_file.name, content, cfg["key"])
+                if cfg["key"] == "cv":
+                    if new_file.name.endswith(".pdf"):
+                        st.session_state.cv_text = extract_text_from_pdf(content)
+                    else:
+                        st.session_state.cv_text = extract_text_from_docx(content)
+                elif cfg["key"] == "cover_letter":
+                    if new_file.name.endswith(".pdf"):
+                        st.session_state.cover_letter_text = extract_text_from_pdf(content)
+                    else:
+                        st.session_state.cover_letter_text = extract_text_from_docx(content)
+                st.success(f"'{new_file.name}' gespeichert!")
 
 # ═══════════════════════════════════════════
 # TAB 4: AI Cover Letter
@@ -1335,9 +1347,9 @@ with tab5:
                     color_discrete_sequence=["#c4956a"]
                 )
                 fig_bar.update_layout(
-                    paper_bgcolor="#1e2235",
-                    plot_bgcolor="#1e2235",
-                    font={"color": "#e2e8f0"},
+                    paper_bgcolor="#faf7f2",
+                    plot_bgcolor="#faf7f2",
+                    font={"color": "#2d2417"},
                     xaxis={"gridcolor": "#e5ddd0"},
                     yaxis={"gridcolor": "#e5ddd0"}
                 )
