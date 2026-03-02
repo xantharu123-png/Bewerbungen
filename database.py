@@ -26,9 +26,10 @@ def init_db():
             print("[DB] Restoring from Google Drive...")
             cloud_data = download_json(DRIVE_DB_NAME)
             if cloud_data:
-                save_db_local(cloud_data)
-                # Also restore documents
+                # First restore documents (updates paths in cloud_data dict)
                 _restore_documents_from_drive(cloud_data)
+                # Save AFTER restore so updated paths are persisted
+                save_db_local(cloud_data)
                 print(f"[DB] Restored from Google Drive! Jobs: {len(cloud_data.get('jobs', []))}, "
                       f"Docs: {len(cloud_data.get('documents', {}))}, "
                       f"Settings: {list(cloud_data.get('settings', {}).keys())}")
@@ -42,24 +43,43 @@ def init_db():
 
 
 def _restore_documents_from_drive(db_data: dict):
-    """Restore uploaded documents from Drive."""
+    """Restore uploaded documents from Drive.
+
+    Downloads each document file and updates the path in db_data (in-place).
+    The caller MUST save db_data to disk afterwards!
+    """
+    import time
     docs = db_data.get("documents", {})
     for doc_type, doc_info in docs.items():
         filename = doc_info.get("filename", "")
-        if filename:
-            filepath = DOCS_PATH / filename
-            # Skip if file already exists locally
-            if filepath.exists() and filepath.stat().st_size > 0:
-                continue
+        if not filename:
+            continue
+
+        filepath = DOCS_PATH / filename
+        # Always update path to match current local structure
+        doc_info["path"] = str(filepath)
+
+        # Skip if file already exists locally
+        if filepath.exists() and filepath.stat().st_size > 0:
+            print(f"[DB] Document already local: {filename}")
+            continue
+
+        # Try download with retry (Drive can be slow on cold start)
+        content = None
+        for attempt in range(3):
             content = download_file(f"docs/{filename}")
             if content:
-                with open(filepath, "wb") as f:
-                    f.write(content)
-                # Fix path in DB to match local path
-                doc_info["path"] = str(filepath)
-                print(f"[DB] Restored document: {filename}")
-            else:
-                print(f"[DB] WARNING: Could not restore {filename} from Drive")
+                break
+            print(f"[DB] Retry {attempt + 1}/3 for {filename}...")
+            time.sleep(1)
+
+        if content:
+            DOCS_PATH.mkdir(parents=True, exist_ok=True)
+            with open(filepath, "wb") as f:
+                f.write(content)
+            print(f"[DB] Restored document: {filename} ({len(content)} bytes)")
+        else:
+            print(f"[DB] WARNING: Could not restore {filename} from Drive after 3 attempts")
 
 
 def save_db_local(data: dict):
@@ -166,24 +186,31 @@ def save_document(name: str, content: bytes, doc_type: str):
 
 def get_document(doc_type: str) -> dict | None:
     """Get document info. Re-downloads from Drive if local file is missing."""
-    doc_info = load_db().get("documents", {}).get(doc_type)
+    db = load_db()
+    doc_info = db.get("documents", {}).get(doc_type)
     if not doc_info:
         return None
 
-    filepath = Path(doc_info.get("path", ""))
     filename = doc_info.get("filename", "")
+    if not filename:
+        return None
+
+    # Always use standard local path
+    local_path = DOCS_PATH / filename
+    doc_info["path"] = str(local_path)
 
     # If local file missing, try to restore from Drive
-    if not filepath.exists() or filepath.stat().st_size == 0:
+    if not local_path.exists() or local_path.stat().st_size == 0:
         if is_drive_available() and filename:
             content = download_file(f"docs/{filename}")
             if content:
                 DOCS_PATH.mkdir(parents=True, exist_ok=True)
-                local_path = DOCS_PATH / filename
                 with open(local_path, "wb") as f:
                     f.write(content)
-                doc_info["path"] = str(local_path)
-                print(f"[DB] Re-downloaded document: {filename}")
+                # Update path in DB so it persists
+                db["documents"][doc_type]["path"] = str(local_path)
+                save_db_local(db)
+                print(f"[DB] Re-downloaded document: {filename} ({len(content)} bytes)")
                 return doc_info
         return None  # File truly missing
 

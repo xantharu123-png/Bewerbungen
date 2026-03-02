@@ -28,7 +28,7 @@ except ImportError:
     GOOGLE_AVAILABLE = False
 
 
-SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 def _load_credentials():
