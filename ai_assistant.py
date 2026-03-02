@@ -240,134 +240,139 @@ def generate_cover_letter_pdf(
     contact_person: str = "",
     company_address: str = "",
 ) -> bytes:
-    """Generate a professionally formatted Swiss business letter PDF.
+    """Generate a Swiss business letter PDF matching the user's DOCX template exactly.
 
-    Layout matches a classic Swiss Bewerbungsschreiben:
-    - Sender top-left
-    - Recipient block right-aligned (tabbed)
-    - Date right-aligned
-    - Betreff bold
-    - Body with support for bullet points ("- " prefix)
-    - Greeting and signature
+    Template layout (Bewerbungsschreiben_Mikulic.docx):
+    - Sender: Name, Street, City (3 lines, left, 11pt)
+    - Phone [TAB 9.8cm] Company name (same line)
+    - [TAB 9.8cm] Company address lines
+    - Empty line
+    - [TAB 9.8cm] "Gerlikon, DD.MM.YYYY"
+    - 2 empty lines
+    - Betreff bold 11pt
+    - Empty line
+    - Sehr geehrte Damen und Herren
+    - Body text (11pt, single spacing, space_after=6pt)
+    - Bullet points (• with indent)
+    - Closing + signature
     """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm, cm
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY, TA_RIGHT
+    from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.colors import HexColor
 
     buffer = io.BytesIO()
-    page_w, page_h = A4
+    page_w, page_h = A4  # 21.0 x 29.7 cm
 
+    # Margins from DOCX: top=2.5, bottom=2.0, left=2.5, right=2.5
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
         topMargin=2.5*cm,
-        bottomMargin=2.5*cm,
+        bottomMargin=2.0*cm,
         leftMargin=2.5*cm,
         rightMargin=2.5*cm,
     )
 
-    content_width = page_w - 5*cm  # total content width
+    content_width = page_w - 5*cm   # 16.0 cm
+    TAB_POS = 9.8*cm                # Tab stop from DOCX template
+    col_left = TAB_POS              # left column width
+    col_right = content_width - TAB_POS  # right column width
 
-    # ── Styles ──
-    style_sender = ParagraphStyle(
-        'Sender', fontName='Helvetica', fontSize=9, leading=13,
-        alignment=TA_LEFT, textColor=HexColor('#444444'),
+    # All text is 11pt, single spacing (leading ~14pt), color black
+    COLOR = HexColor('#222222')
+    FONT = 'Helvetica'
+    SIZE = 11
+    LEADING = 14
+    SP_AFTER = 6  # space_after from template: 6pt
+
+    s_normal = ParagraphStyle(
+        'Normal', fontName=FONT, fontSize=SIZE, leading=LEADING,
+        alignment=TA_LEFT, textColor=COLOR, spaceAfter=0,
     )
-    style_recipient = ParagraphStyle(
-        'Recipient', fontName='Helvetica', fontSize=10.5, leading=15,
-        alignment=TA_LEFT, textColor=HexColor('#222222'),
+    s_bold = ParagraphStyle(
+        'Bold', fontName='Helvetica-Bold', fontSize=SIZE, leading=LEADING,
+        alignment=TA_LEFT, textColor=COLOR, spaceAfter=0,
     )
-    style_date = ParagraphStyle(
-        'Date', fontName='Helvetica', fontSize=10.5, leading=15,
-        alignment=TA_RIGHT, textColor=HexColor('#222222'),
+    s_body = ParagraphStyle(
+        'Body', fontName=FONT, fontSize=SIZE, leading=LEADING,
+        alignment=TA_LEFT, textColor=COLOR, spaceAfter=SP_AFTER,
     )
-    style_betreff = ParagraphStyle(
-        'Betreff', fontName='Helvetica-Bold', fontSize=11, leading=16,
-        alignment=TA_LEFT, textColor=HexColor('#222222'),
-    )
-    style_body = ParagraphStyle(
-        'Body', fontName='Helvetica', fontSize=10.5, leading=15,
-        alignment=TA_JUSTIFY, textColor=HexColor('#222222'), spaceAfter=8,
-    )
-    style_bullet = ParagraphStyle(
-        'Bullet', fontName='Helvetica', fontSize=10.5, leading=15,
-        alignment=TA_LEFT, textColor=HexColor('#222222'),
-        leftIndent=15, firstLineIndent=-15, spaceAfter=3,
-        bulletIndent=0,
-    )
-    style_greeting = ParagraphStyle(
-        'Greeting', fontName='Helvetica', fontSize=10.5, leading=15,
-        alignment=TA_LEFT, textColor=HexColor('#222222'),
-    )
-    style_closing = ParagraphStyle(
-        'Closing', fontName='Helvetica', fontSize=10.5, leading=15,
-        alignment=TA_LEFT, textColor=HexColor('#222222'),
+    s_bullet = ParagraphStyle(
+        'Bullet', fontName=FONT, fontSize=SIZE, leading=LEADING,
+        alignment=TA_LEFT, textColor=COLOR, spaceAfter=4,
+        leftIndent=14, firstLineIndent=-14,
     )
 
-    story = []
-
-    # ═══ 1. SENDER (left) + RECIPIENT (right) — side by side using Table ═══
-    sender_text = (
-        "Miroslav Mikulic<br/>"
-        "Im Weberlis Rebberg 42<br/>"
-        "8500 Gerlikon<br/>"
-        "079 602 83 31<br/>"
-        "miroslav.mikulic@gmail.com"
-    )
-
-    # Clean the company name
-    clean_company = _sanitize_company(company)
-
-    recipient_parts = []
-    if clean_company:
-        recipient_parts.append(clean_company)
-    if contact_person:
-        recipient_parts.append(f"z.Hd. {contact_person}")
-    if company_address:
-        for addr_line in company_address.strip().split('\n'):
-            if addr_line.strip():
-                recipient_parts.append(addr_line.strip())
-    if not recipient_parts:
-        recipient_parts.append("")
-
-    recipient_text = "<br/>".join(recipient_parts)
-
-    sender_para = Paragraph(sender_text, style_sender)
-    recipient_para = Paragraph(recipient_text, style_recipient)
-
-    # Two-column table: sender left, recipient right
-    addr_table = Table(
-        [[sender_para, recipient_para]],
-        colWidths=[content_width * 0.48, content_width * 0.52],
-    )
-    addr_table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+    no_pad = [
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 0),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-    ]))
-    story.append(addr_table)
-    story.append(Spacer(1, 15*mm))
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]
 
-    # ═══ 2. DATE (right-aligned) ═══
+    story = []
+
+    # Clean company name
+    clean_company = _sanitize_company(company)
+
+    # ═══ 1. SENDER BLOCK: Name, Street, City (3 lines, left-aligned) ═══
+    story.append(Paragraph("Miroslav Mikulic", s_normal))
+    story.append(Paragraph("Im Weberlis Rebberg 42", s_normal))
+    story.append(Paragraph("8500 Gerlikon", s_normal))
+
+    # ═══ 2. PHONE [TAB] COMPANY — same line, using table ═══
+    # Line: "079 602 83 31" [tab] "Company Name"
+    phone_para = Paragraph("079 602 83 31", s_normal)
+    company_para = Paragraph(clean_company if clean_company else "", s_normal)
+    row1 = Table([[phone_para, company_para]], colWidths=[col_left, col_right])
+    row1.setStyle(TableStyle(no_pad))
+    story.append(row1)
+
+    # Recipient address lines (tabbed to right)
+    recipient_lines = []
+    if contact_person:
+        recipient_lines.append(contact_person)
+    if company_address:
+        for addr_line in company_address.strip().split('\n'):
+            if addr_line.strip():
+                recipient_lines.append(addr_line.strip())
+
+    for rline in recipient_lines:
+        empty = Paragraph("", s_normal)
+        rpara = Paragraph(rline, s_normal)
+        row = Table([[empty, rpara]], colWidths=[col_left, col_right])
+        row.setStyle(TableStyle(no_pad))
+        story.append(row)
+
+    # ═══ 3. EMPTY LINE ═══
+    story.append(Spacer(1, LEADING))
+
+    # ═══ 4. DATE at tab position ═══
     date_str = f"Gerlikon, {datetime.now().strftime('%d.%m.%Y')}"
-    story.append(Paragraph(date_str, style_date))
-    story.append(Spacer(1, 10*mm))
+    empty = Paragraph("", s_normal)
+    date_para = Paragraph(date_str, s_normal)
+    date_row = Table([[empty, date_para]], colWidths=[col_left, col_right])
+    date_row.setStyle(TableStyle(no_pad))
+    story.append(date_row)
 
-    # ═══ 3. BETREFF (bold) ═══
-    betreff = f"Bewerbung als {job_title}" if job_title else "Bewerbung"
-    story.append(Paragraph(betreff, style_betreff))
-    story.append(Spacer(1, 8*mm))
+    # ═══ 5. TWO EMPTY LINES ═══
+    story.append(Spacer(1, LEADING * 2))
 
-    # ═══ 4. LETTER BODY (from AI) ═══
+    # ═══ 6. BETREFF (bold) ═══
+    betreff = job_title if job_title else "Bewerbung"
+    story.append(Paragraph(betreff, s_bold))
+
+    # ═══ 7. EMPTY LINE ═══
+    story.append(Spacer(1, LEADING))
+
+    # ═══ 8. LETTER BODY (from AI) ═══
     body_text = letter_text.strip()
 
-    # Remove any header/address/date/betreff the AI might have added before the greeting
+    # Remove any header/address/date/betreff the AI might have added
     clean_lines = body_text.split('\n')
     body_start = 0
     for idx, line in enumerate(clean_lines):
@@ -375,29 +380,27 @@ def generate_cover_letter_pdf(
         if stripped.lower().startswith('sehr geehrte') or stripped.lower().startswith('dear'):
             body_start = idx
             break
-        # Skip header-like lines
         if any(kw in stripped.lower() for kw in [
             'miroslav', 'weberlis', 'gerlikon', '8500', '079 602',
             'bewerbung als', 'betreff', '@gmail', 'z.hd', 'z. hd',
-            'im weberlis',
+            'im weberlis', 'eichmatt',
         ]):
             continue
         if stripped and len(stripped) < 60 and not stripped.endswith('.'):
-            continue  # Likely address/header line
+            continue
         if stripped:
             body_start = idx
             break
 
     clean_body = '\n'.join(clean_lines[body_start:])
 
-    # Parse into paragraphs, preserving bullet points
-    paragraphs = []  # list of (type, text) — type: 'text', 'bullet', 'greeting', 'closing', 'signature'
+    # Parse into typed paragraphs
+    paragraphs = []
     current_lines = []
 
     def flush_current():
         if current_lines:
-            text = ' '.join(current_lines)
-            paragraphs.append(('text', text))
+            paragraphs.append(('text', ' '.join(current_lines)))
             current_lines.clear()
 
     for line in clean_body.split('\n'):
@@ -407,20 +410,15 @@ def generate_cover_letter_pdf(
             flush_current()
             continue
 
-        # Bullet point line
         if stripped.startswith('- ') or stripped.startswith('• '):
             flush_current()
-            bullet_text = stripped[2:].strip()
-            paragraphs.append(('bullet', bullet_text))
-        # Greeting line
+            paragraphs.append(('bullet', stripped.lstrip('-•').strip()))
         elif stripped.lower().startswith('sehr geehrte') or stripped.lower().startswith('dear'):
             flush_current()
             paragraphs.append(('greeting', stripped))
-        # Closing
         elif stripped.lower().startswith('freundliche gr') or stripped.lower().startswith('mit freundlichen'):
             flush_current()
             paragraphs.append(('closing', stripped))
-        # Signature
         elif stripped == 'Miroslav Mikulic':
             flush_current()
             paragraphs.append(('signature', stripped))
@@ -429,26 +427,22 @@ def generate_cover_letter_pdf(
 
     flush_current()
 
-    # Render paragraphs
+    # Render
     for ptype, text in paragraphs:
         if not text:
             continue
-
         if ptype == 'greeting':
-            story.append(Paragraph(text, style_greeting))
-            story.append(Spacer(1, 4*mm))
+            story.append(Paragraph(text, s_body))
+            story.append(Spacer(1, SP_AFTER))
         elif ptype == 'bullet':
-            # Use bullet character
-            bullet_para = Paragraph(f"\u2022  {text}", style_bullet)
-            story.append(bullet_para)
+            story.append(Paragraph(f"\u2022  {text}", s_bullet))
         elif ptype == 'closing':
-            story.append(Spacer(1, 6*mm))
-            story.append(Paragraph(text, style_closing))
+            story.append(Spacer(1, SP_AFTER))
+            story.append(Paragraph(text, s_body))
         elif ptype == 'signature':
-            story.append(Spacer(1, 10*mm))
-            story.append(Paragraph(text, style_closing))
+            story.append(Paragraph(text, s_body))
         else:
-            story.append(Paragraph(text, style_body))
+            story.append(Paragraph(text, s_body))
 
     doc.build(story)
     return buffer.getvalue()
