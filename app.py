@@ -18,7 +18,7 @@ from scraper import search_multiple_platforms, get_job_details
 from drive_storage import is_drive_available
 from ai_assistant import (
     extract_text_from_pdf, extract_text_from_docx,
-    generate_cover_letter, calculate_match_score
+    generate_cover_letter, generate_cover_letter_pdf, calculate_match_score
 )
 
 # ─────────────────────────────────────────────
@@ -586,6 +586,8 @@ with tab1:
                             job_desc = details.get("description", "")
                             if details.get("company") and not job.get("company"):
                                 job["company"] = details["company"]
+                            contact_person = details.get("contact", "")
+                            contact_email = details.get("email", "")
 
                         if not job_desc:
                             st.warning("Konnte Stellenbeschreibung nicht laden. Bitte manuell im Tab 'KI-Anschreiben' eingeben.")
@@ -601,9 +603,11 @@ with tab1:
                                         job_description=job_desc,
                                         cv_text=cv_text,
                                         existing_letter=st.session_state.get("cover_letter_text", ""),
-                                        language="de"
+                                        language="de",
+                                        contact_person=contact_person,
                                     )
                                     st.session_state[f"letter_{i}"] = letter
+                                    st.session_state[f"contact_email_{i}"] = contact_email
                                     st.session_state[f"generating_{i}"] = False
                                     st.success("✅ Anschreiben generiert!")
                                 except Exception as e:
@@ -616,36 +620,94 @@ with tab1:
                     with st.expander(f"✉️ Anschreiben für «{job['title']}»", expanded=True):
                         st.text_area("", value=letter_text, height=300, key=f"letter_text_{i}")
 
+                        # Generate PDF
+                        try:
+                            pdf_bytes = generate_cover_letter_pdf(letter_text)
+                            company_clean = job.get('company', 'Firma').replace(' ', '_').replace('/', '-')
+                            pdf_filename = f"Anschreiben_{company_clean}.pdf"
+                        except Exception as e:
+                            pdf_bytes = None
+                            st.warning(f"PDF-Erstellung fehlgeschlagen: {e}")
+
                         import urllib.parse
                         subject = f"Bewerbung: {job.get('title', '')}" + (f" — {job.get('company', '')}" if job.get('company') else "")
-                        body_encoded = urllib.parse.quote(letter_text)
+                        # Use contact email if available, otherwise empty
+                        to_email = st.session_state.get(f"contact_email_{i}", "")
                         subject_encoded = urllib.parse.quote(subject)
-                        gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&su={subject_encoded}&body={body_encoded}"
+                        body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{job.get('title', '')}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n\nFreundliche Grüsse\nMiroslav Mikulic"
+                        body_encoded = urllib.parse.quote(body_text)
+                        gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1"
+                        if to_email:
+                            gmail_url += f"&to={urllib.parse.quote(to_email)}"
+                        gmail_url += f"&su={subject_encoded}&body={body_encoded}"
 
-                        col_g1, col_g2, col_g3 = st.columns(3)
+                        col_g1, col_g2, col_g3, col_g4 = st.columns(4)
                         with col_g1:
-                            st.markdown(
-                                f'<a href="{gmail_url}" target="_blank" style="'
-                                f'display:inline-block;width:100%;text-align:center;padding:10px 16px;'
-                                f'background:linear-gradient(135deg,#ea4335,#d93025);color:white;'
-                                f'border-radius:10px;text-decoration:none;font-weight:600;font-size:0.9rem;'
-                                f'box-sizing:border-box;">'
-                                f'📧 Gmail Draft öffnen</a>',
-                                unsafe_allow_html=True
-                            )
+                            if pdf_bytes:
+                                st.download_button(
+                                    "📄 Anschreiben PDF",
+                                    data=pdf_bytes,
+                                    file_name=pdf_filename,
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                    key=f"dl_pdf_{i}"
+                                )
                         with col_g2:
-                            st.download_button(
-                                "📥 Als TXT",
-                                data=letter_text.encode("utf-8"),
-                                file_name=f"Anschreiben_{job.get('company','')}.txt".replace(" ", "_"),
-                                mime="text/plain",
-                                use_container_width=True,
-                                key=f"dl_{i}"
-                            )
+                            # CV download if available
+                            cv_doc = get_document("cv")
+                            if cv_doc:
+                                cv_path = Path(cv_doc.get("path", ""))
+                                if cv_path.exists():
+                                    with open(cv_path, "rb") as f:
+                                        cv_bytes = f.read()
+                                    st.download_button(
+                                        "📋 Lebenslauf",
+                                        data=cv_bytes,
+                                        file_name=cv_doc.get("filename", "Lebenslauf.pdf"),
+                                        mime="application/pdf",
+                                        use_container_width=True,
+                                        key=f"dl_cv_{i}"
+                                    )
+                                else:
+                                    st.caption("CV nicht lokal verfügbar")
+                            else:
+                                st.caption("Kein CV hochgeladen")
                         with col_g3:
+                            # Diplome download if available
+                            diploma_doc = get_document("diplome")
+                            if diploma_doc:
+                                diploma_path = Path(diploma_doc.get("path", ""))
+                                if diploma_path.exists():
+                                    with open(diploma_path, "rb") as f:
+                                        diploma_bytes = f.read()
+                                    st.download_button(
+                                        "🎓 Diplome",
+                                        data=diploma_bytes,
+                                        file_name=diploma_doc.get("filename", "Diplome.pdf"),
+                                        mime="application/pdf",
+                                        use_container_width=True,
+                                        key=f"dl_diploma_{i}"
+                                    )
+                                else:
+                                    st.caption("Diplome nicht lokal")
+                            else:
+                                st.caption("Keine Diplome hochgeladen")
+                        with col_g4:
                             if st.button("🗑️ Schliessen", key=f"close_{i}", use_container_width=True):
                                 del st.session_state[f"letter_{i}"]
                                 st.rerun()
+
+                        # Gmail link with instructions
+                        st.markdown(
+                            f'<a href="{gmail_url}" target="_blank" style="'
+                            f'display:inline-block;width:100%;text-align:center;padding:12px 16px;margin-top:8px;'
+                            f'background:linear-gradient(135deg,#ea4335,#d93025);color:white;'
+                            f'border-radius:10px;text-decoration:none;font-weight:600;font-size:0.95rem;'
+                            f'box-sizing:border-box;">'
+                            f'📧 Gmail öffnen & PDFs anhängen</a>',
+                            unsafe_allow_html=True
+                        )
+                        st.caption("💡 Lade zuerst die PDFs oben herunter, dann öffne Gmail und hänge sie an.")
         
         if st.button("📥 Alle speichern", type="primary"):
             count = 0
@@ -928,6 +990,8 @@ with tab4:
 
         # Auto-fetch job description if not already loaded for this job
         job_desc_key = f"ai_job_desc_{selected_job.get('id', '')}"
+        contact_key = f"ai_contact_{selected_job.get('id', '')}"
+        contact_email_key = f"ai_contact_email_{selected_job.get('id', '')}"
         if job_desc_key not in st.session_state:
             # Try to use stored description first
             if selected_job.get("description"):
@@ -940,6 +1004,9 @@ with tab4:
                         # Also update company if we got a better one
                         if details.get("company") and not ai_company:
                             ai_company = details["company"]
+                        # Store contact info
+                        st.session_state[contact_key] = details.get("contact", "")
+                        st.session_state[contact_email_key] = details.get("email", "")
                     else:
                         st.session_state[job_desc_key] = ""
 
@@ -1019,7 +1086,14 @@ with tab4:
         cv_with_extra = st.session_state.cv_text
         if ai_extra_info:
             cv_with_extra += f"\n\nZusätzliche Informationen: {ai_extra_info}"
-        
+
+        # Get contact info if available
+        ai_contact = ""
+        ai_contact_email = ""
+        if selected_job:
+            ai_contact = st.session_state.get(f"ai_contact_{selected_job.get('id', '')}", "")
+            ai_contact_email = st.session_state.get(f"ai_contact_email_{selected_job.get('id', '')}", "")
+
         with st.spinner("KI generiert Anschreiben... (ca. 15-30 Sekunden)"):
             try:
                 result = generate_cover_letter(
@@ -1028,9 +1102,11 @@ with tab4:
                     job_description=ai_job_desc,
                     cv_text=cv_with_extra,
                     existing_letter=st.session_state.cover_letter_text,
-                    language=lang_code
+                    language=lang_code,
+                    contact_person=ai_contact,
                 )
                 st.session_state["generated_letter"] = result
+                st.session_state["generated_letter_email"] = ai_contact_email
                 st.success("✅ Anschreiben generiert!")
             except Exception as e:
                 st.error(f"Fehler: {e}")
@@ -1087,46 +1163,102 @@ with tab4:
     if "generated_letter" in st.session_state:
         st.markdown("---")
         st.markdown("### ✉️ Generiertes Anschreiben")
-        
+
         letter_text = st.text_area(
             "",
             value=st.session_state["generated_letter"],
             height=400
         )
-        
-        col_dl, col_save, col_gmail = st.columns(3)
-        with col_dl:
-            st.download_button(
-                "📥 Als TXT herunterladen",
-                data=letter_text.encode("utf-8"),
-                file_name=f"Anschreiben_{ai_company}_{ai_title}.txt".replace(" ", "_"),
-                mime="text/plain",
-                use_container_width=True
-            )
-        with col_save:
-            if selected_job and st.button("💾 In Stelle speichern", use_container_width=True):
+
+        # Generate PDF
+        try:
+            pdf_bytes = generate_cover_letter_pdf(letter_text)
+            company_clean = ai_company.replace(' ', '_').replace('/', '-') if ai_company else "Firma"
+            pdf_filename = f"Anschreiben_{company_clean}.pdf"
+        except Exception as e:
+            pdf_bytes = None
+            st.warning(f"PDF-Erstellung fehlgeschlagen: {e}")
+
+        st.markdown("#### 📥 Unterlagen herunterladen")
+        col_dl1, col_dl2, col_dl3, col_dl4 = st.columns(4)
+        with col_dl1:
+            if pdf_bytes:
+                st.download_button(
+                    "📄 Anschreiben PDF",
+                    data=pdf_bytes,
+                    file_name=pdf_filename,
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="tab4_dl_pdf"
+                )
+        with col_dl2:
+            cv_doc = get_document("cv")
+            if cv_doc:
+                cv_path = Path(cv_doc.get("path", ""))
+                if cv_path.exists():
+                    with open(cv_path, "rb") as f:
+                        cv_bytes = f.read()
+                    st.download_button(
+                        "📋 Lebenslauf",
+                        data=cv_bytes,
+                        file_name=cv_doc.get("filename", "Lebenslauf.pdf"),
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="tab4_dl_cv"
+                    )
+                else:
+                    st.caption("CV nicht lokal verfügbar")
+            else:
+                st.caption("Kein CV hochgeladen")
+        with col_dl3:
+            diploma_doc = get_document("diplome")
+            if diploma_doc:
+                diploma_path = Path(diploma_doc.get("path", ""))
+                if diploma_path.exists():
+                    with open(diploma_path, "rb") as f:
+                        diploma_bytes = f.read()
+                    st.download_button(
+                        "🎓 Diplome",
+                        data=diploma_bytes,
+                        file_name=diploma_doc.get("filename", "Diplome.pdf"),
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="tab4_dl_diploma"
+                    )
+                else:
+                    st.caption("Diplome nicht lokal")
+            else:
+                st.caption("Keine Diplome hochgeladen")
+        with col_dl4:
+            if selected_job and st.button("💾 In Stelle speichern", use_container_width=True, key="tab4_save_job"):
                 update_job(selected_job["id"], {
                     "cover_letter": letter_text,
                     "status": "Interessant"
                 })
                 st.success("Gespeichert!")
-        with col_gmail:
-            # Gmail Draft button
-            import urllib.parse
-            subject = f"Bewerbung: {ai_title}" + (f" — {ai_company}" if ai_company else "")
-            body_encoded = urllib.parse.quote(letter_text)
-            subject_encoded = urllib.parse.quote(subject)
-            gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&su={subject_encoded}&body={body_encoded}"
-            st.markdown(
-                f'<a href="{gmail_url}" target="_blank" style="'
-                f'display:inline-block;width:100%;text-align:center;padding:8px 16px;'
-                f'background:linear-gradient(135deg,#ea4335,#d93025);color:white;'
-                f'border-radius:10px;text-decoration:none;font-weight:500;font-size:0.875rem;'
-                f'box-sizing:border-box;">'
-                f'📧 Gmail Draft öffnen</a>',
-                unsafe_allow_html=True
-            )
-            st.caption("Öffnet Gmail mit vorausgefülltem Betreff & Text")
+
+        # Gmail compose link
+        import urllib.parse
+        subject = f"Bewerbung: {ai_title}" + (f" — {ai_company}" if ai_company else "")
+        to_email = st.session_state.get("generated_letter_email", "")
+        subject_encoded = urllib.parse.quote(subject)
+        body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{ai_title}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n\nFreundliche Grüsse\nMiroslav Mikulic"
+        body_encoded = urllib.parse.quote(body_text)
+        gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1"
+        if to_email:
+            gmail_url += f"&to={urllib.parse.quote(to_email)}"
+        gmail_url += f"&su={subject_encoded}&body={body_encoded}"
+
+        st.markdown(
+            f'<a href="{gmail_url}" target="_blank" style="'
+            f'display:inline-block;width:100%;text-align:center;padding:12px 16px;margin-top:8px;'
+            f'background:linear-gradient(135deg,#ea4335,#d93025);color:white;'
+            f'border-radius:10px;text-decoration:none;font-weight:600;font-size:0.95rem;'
+            f'box-sizing:border-box;">'
+            f'📧 Gmail öffnen & PDFs anhängen</a>',
+            unsafe_allow_html=True
+        )
+        st.caption("💡 Lade zuerst die PDFs oben herunter, dann öffne Gmail und hänge sie an.")
 
 # ═══════════════════════════════════════════
 # TAB 5: Statistics
