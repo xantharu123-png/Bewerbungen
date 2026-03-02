@@ -296,12 +296,12 @@ with st.sidebar:
 
     # Drive sync status
     if is_drive_available():
-        st.caption("☁️ Google Drive verbunden — Daten werden synchronisiert")
+        st.caption("☁️ Google Drive verbunden")
     else:
-        st.caption("💾 Lokaler Speicher — Google Drive nicht konfiguriert")
+        st.caption("💾 Lokaler Speicher")
 
     st.markdown("---")
-    
+
     # Quick stats
     jobs = get_jobs()
     col1, col2 = st.columns(2)
@@ -310,7 +310,7 @@ with st.sidebar:
     with col2:
         applied = len([j for j in jobs if j["status"] == "Beworben"])
         st.metric("Beworben", applied)
-    
+
     interviews = len([j for j in jobs if j["status"] == "Interview"])
     rejections = len([j for j in jobs if j["status"] == "Absage"])
     col3, col4 = st.columns(2)
@@ -318,48 +318,17 @@ with st.sidebar:
         st.metric("Interviews", interviews)
     with col4:
         st.metric("Absagen", rejections)
-    
-    st.markdown("---")
-    
-    # Settings
-    st.markdown("### ⚙️ Einstellungen")
-    settings = get_settings()
-    
-    st.markdown("---")
-    st.markdown("### 📧 Gmail E-Mail-Versand")
-    gmail_app_pw = st.text_input(
-        "Gmail App-Passwort",
-        value=settings.get("gmail_app_password", ""),
-        type="password",
-        placeholder="xxxx xxxx xxxx xxxx",
-        help="Erstelle ein App-Passwort unter Google Account → Sicherheit → App-Passwörter"
-    )
-    st.caption("[App-Passwort erstellen →](https://myaccount.google.com/apppasswords)")
-
-    st.markdown("---")
-    st.markdown("### 🔍 Standard-Suche")
-    st.caption("Die Jobprofile kannst du direkt im Tab 'Stellensuche' per Multiselect auswählen.")
-
-    default_days = st.slider(
-        "Inserate der letzten X Tage",
-        min_value=3, max_value=60, value=settings.get("default_days", 7)
-    )
-
-    if st.button("💾 Einstellungen speichern", use_container_width=True):
-        settings["default_days"] = default_days
-        settings["gmail_app_password"] = gmail_app_pw
-        save_settings(settings)
-        st.success("Gespeichert!")
 
 # ─────────────────────────────────────────────
 # Main Content
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🔍 Stellensuche",
     "📋 Meine Bewerbungen",
     "📄 Unterlagen",
     "🤖 KI-Anschreiben",
-    "📊 Statistiken"
+    "📊 Statistiken",
+    "⚙️ Einstellungen"
 ])
 
 # ═══════════════════════════════════════════
@@ -1479,3 +1448,76 @@ with tab5:
             mime="text/csv",
             type="primary"
         )
+
+# ═══════════════════════════════════════════
+# TAB 6: Settings
+# ═══════════════════════════════════════════
+with tab6:
+    st.markdown("## ⚙️ Einstellungen")
+
+    settings = get_settings()
+
+    # ── Gmail E-Mail-Versand ──
+    st.markdown(
+        '<div style="background:#ffffff;border:1px solid #e5ddd0;border-radius:12px;padding:20px 24px;margin-bottom:20px;'
+        'box-shadow:0 1px 3px rgba(0,0,0,0.04);">'
+        '<div style="color:#2d2417;font-weight:700;font-size:1.05rem;margin-bottom:12px;">📧 Gmail E-Mail-Versand</div>'
+        '<div style="color:#7a6b56;font-size:0.85rem;margin-bottom:8px;">'
+        'Damit du Bewerbungen direkt aus der App versenden kannst, brauchst du ein Gmail App-Passwort.</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    gmail_app_pw = st.text_input(
+        "Gmail App-Passwort",
+        value=settings.get("gmail_app_password", ""),
+        type="password",
+        placeholder="xxxx xxxx xxxx xxxx",
+        help="16-stelliges App-Passwort (mit oder ohne Leerzeichen)",
+    )
+    st.markdown(
+        '<div style="font-size:0.82rem;color:#7a6b56;margin-top:-8px;margin-bottom:16px;">'
+        '1. <a href="https://myaccount.google.com/security" target="_blank" style="color:#c4956a;">2-Faktor-Auth aktivieren</a> '
+        '→ 2. <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#c4956a;">App-Passwort erstellen</a> '
+        '→ 3. Hier eintragen</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("---")
+
+    # ── Sucheinstellungen ──
+    st.markdown(
+        '<div style="background:#ffffff;border:1px solid #e5ddd0;border-radius:12px;padding:20px 24px;margin-bottom:20px;'
+        'box-shadow:0 1px 3px rgba(0,0,0,0.04);">'
+        '<div style="color:#2d2417;font-weight:700;font-size:1.05rem;margin-bottom:12px;">🔍 Sucheinstellungen</div>'
+        '<div style="color:#7a6b56;font-size:0.85rem;margin-bottom:8px;">'
+        'Die Jobprofile kannst du direkt im Tab «Stellensuche» per Multiselect auswählen.</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    default_days = st.slider(
+        "Inserate der letzten X Tage",
+        min_value=3, max_value=60, value=settings.get("default_days", 7),
+    )
+
+    st.markdown("---")
+
+    # ── Speichern ──
+    if st.button("💾 Einstellungen speichern", type="primary", use_container_width=True):
+        settings["default_days"] = default_days
+        settings["gmail_app_password"] = gmail_app_pw
+        save_settings(settings)
+        st.success("✅ Einstellungen gespeichert!")
+
+    # ── Info ──
+    st.markdown("---")
+    st.markdown(
+        '<div style="background:#fff8f0;border:1px solid #e5ddd0;border-radius:10px;padding:16px 20px;'
+        'color:#7a6b56;font-size:0.82rem;">'
+        '<strong>ℹ️ Über JobTracker Pro</strong><br>'
+        'Absender-E-Mail: miroslav.mikulic@gmail.com<br>'
+        'Daten gespeichert via: ' + ('Google Drive ☁️' if is_drive_available() else 'Lokaler Speicher 💾') +
+        '</div>',
+        unsafe_allow_html=True,
+    )
