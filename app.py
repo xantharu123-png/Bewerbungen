@@ -35,110 +35,206 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* Main background */
-    .stApp { background-color: #0f1117; }
-    
-    /* Sidebar */
+    /* ══════════════════════════════════════════
+       Modern Light-Dark Theme — Clean & Professional
+       ══════════════════════════════════════════ */
+
+    /* Main background — warm dark, not pitch black */
+    .stApp {
+        background-color: #1a1f2e;
+    }
+
+    /* Sidebar — slightly lighter, clean separation */
     [data-testid="stSidebar"] {
-        background-color: #1a1d2e;
-        border-right: 1px solid #2d3154;
+        background: linear-gradient(180deg, #232a3e 0%, #1e2536 100%);
+        border-right: 1px solid rgba(255,255,255,0.06);
     }
-    
-    /* Cards */
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        color: #e8ecf4;
+    }
+
+    /* ── Cards ── */
     .job-card {
-        background: #1e2235;
-        border: 1px solid #2d3154;
-        border-radius: 12px;
-        padding: 16px 20px;
-        margin-bottom: 12px;
-        transition: border-color 0.2s;
+        background: linear-gradient(135deg, #252d44 0%, #1e2536 100%);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        padding: 18px 22px;
+        margin-bottom: 14px;
+        transition: all 0.25s ease;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
-    .job-card:hover { border-color: #4a6cf7; }
-    
+    .job-card:hover {
+        border-color: #6c8aff;
+        box-shadow: 0 4px 20px rgba(108,138,255,0.15);
+        transform: translateY(-1px);
+    }
+
     .job-title {
         font-size: 1.05rem;
         font-weight: 600;
-        color: #e2e8f0;
-        margin-bottom: 4px;
+        color: #f0f2f8;
+        margin-bottom: 6px;
+        letter-spacing: -0.01em;
     }
     .job-meta {
         font-size: 0.82rem;
-        color: #8892a4;
+        color: #9ba4b8;
         margin-bottom: 8px;
+        line-height: 1.6;
     }
-    .job-company { color: #4a9eff; font-weight: 500; }
-    
-    /* Status badges */
+    .job-company {
+        color: #7ba3ff;
+        font-weight: 600;
+    }
+
+    /* ── Status badges ── */
     .badge {
         display: inline-block;
-        padding: 2px 10px;
+        padding: 3px 12px;
         border-radius: 20px;
-        font-size: 0.75rem;
+        font-size: 0.73rem;
         font-weight: 600;
         color: white;
+        letter-spacing: 0.02em;
     }
-    
-    /* Score circle */
-    .score-high { color: #22c55e; font-size: 1.4rem; font-weight: 700; }
-    .score-mid  { color: #f59e0b; font-size: 1.4rem; font-weight: 700; }
-    .score-low  { color: #ef4444; font-size: 1.4rem; font-weight: 700; }
-    
-    /* Metric cards */
+
+    /* ── Score ── */
+    .score-high { color: #34d399; font-size: 1.4rem; font-weight: 700; }
+    .score-mid  { color: #fbbf24; font-size: 1.4rem; font-weight: 700; }
+    .score-low  { color: #f87171; font-size: 1.4rem; font-weight: 700; }
+
+    /* ── Metric cards ── */
     .metric-card {
-        background: #1e2235;
-        border: 1px solid #2d3154;
-        border-radius: 12px;
-        padding: 20px;
+        background: linear-gradient(135deg, #252d44 0%, #2a3350 100%);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        padding: 22px;
         text-align: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
     }
-    .metric-num { font-size: 2rem; font-weight: 700; color: #4a6cf7; }
-    .metric-label { font-size: 0.85rem; color: #8892a4; }
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .metric-num {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #7ba3ff;
+    }
+    .metric-label {
+        font-size: 0.85rem;
+        color: #9ba4b8;
+        margin-top: 4px;
+    }
+
+    /* ── Tabs — pill style ── */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px;
+        background: #232a3e;
+        border-radius: 12px;
+        padding: 4px;
+    }
     .stTabs [data-baseweb="tab"] {
-        background: #1e2235;
-        border-radius: 8px;
-        color: #8892a4;
-        padding: 8px 16px;
+        background: transparent;
+        border-radius: 10px;
+        color: #9ba4b8;
+        padding: 8px 18px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #d0d7e6;
+        background: rgba(255,255,255,0.04);
     }
     .stTabs [aria-selected="true"] {
-        background: #4a6cf7 !important;
+        background: linear-gradient(135deg, #5b7cfa 0%, #7b5cf5 100%) !important;
         color: white !important;
+        font-weight: 600;
+        box-shadow: 0 2px 12px rgba(91,124,250,0.3);
     }
-    
-    /* Buttons */
+
+    /* ── Buttons ── */
     .stButton button {
-        border-radius: 8px;
+        border-radius: 10px;
         font-weight: 500;
+        transition: all 0.2s ease;
     }
-    
-    /* Input fields */
+    .stButton button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+    }
+    .stButton button[kind="primary"] {
+        background: linear-gradient(135deg, #5b7cfa 0%, #7b5cf5 100%) !important;
+        border: none;
+    }
+
+    /* ── Input fields ── */
     .stTextInput input, .stSelectbox select, .stTextArea textarea {
-        background: #1e2235 !important;
-        border: 1px solid #2d3154 !important;
-        color: #e2e8f0 !important;
-        border-radius: 8px !important;
+        background: #252d44 !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        color: #e8ecf4 !important;
+        border-radius: 10px !important;
+        transition: border-color 0.2s ease;
     }
-    
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #6c8aff !important;
+        box-shadow: 0 0 0 2px rgba(108,138,255,0.15) !important;
+    }
+
+    /* ── Multiselect ── */
+    .stMultiSelect [data-baseweb="tag"] {
+        background: linear-gradient(135deg, #5b7cfa 0%, #7b5cf5 100%) !important;
+        border-radius: 8px;
+        color: white;
+    }
+
+    /* ── Expanders ── */
     div[data-testid="stExpander"] {
-        background: #1e2235;
-        border: 1px solid #2d3154;
+        background: #232a3e;
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 14px;
+    }
+
+    /* ── Typography ── */
+    h1, h2, h3 { color: #f0f2f8; }
+    h2 { letter-spacing: -0.02em; }
+    p, li { color: #b0b8cc; }
+
+    /* ── Alerts ── */
+    .stAlert { border-radius: 12px; }
+
+    /* ── Search header ── */
+    .search-header {
+        background: linear-gradient(135deg, #252d44 0%, #2d2054 50%, #1e2536 100%);
+        border: 1px solid rgba(108,138,255,0.2);
+        border-radius: 16px;
+        padding: 28px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    /* ── File uploader ── */
+    [data-testid="stFileUploader"] {
         border-radius: 12px;
     }
-    
-    h1, h2, h3 { color: #e2e8f0; }
-    p, li { color: #94a3b8; }
-    
-    .stAlert { border-radius: 10px; }
-    
-    /* Search header */
-    .search-header {
-        background: linear-gradient(135deg, #1e2235 0%, #2d1b69 100%);
-        border: 1px solid #4a6cf7;
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 24px;
+
+    /* ── Dividers ── */
+    hr {
+        border-color: rgba(255,255,255,0.06) !important;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3a4260; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #5b7cfa; }
+
+    /* ── Sidebar metrics ── */
+    [data-testid="stSidebar"] [data-testid="stMetric"] {
+        background: rgba(255,255,255,0.03);
+        border-radius: 10px;
+        padding: 8px 12px;
+    }
+    [data-testid="stSidebar"] [data-testid="stMetricValue"] {
+        color: #7ba3ff;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -673,9 +769,16 @@ with tab3:
                 pass
     
     st.markdown("---")
-    st.markdown("### 📎 Weitere Unterlagen")
-    
-    other_docs = ["Referenz 1", "Referenz 2", "Referenz 3", "Diplom / Zertifikat"]
+    st.markdown("### 🎓 Diplome & Zertifikate")
+    st.caption("Lade deine Abschlüsse und Zertifikate hoch — sie werden in deinem Profil gespeichert.")
+
+    other_docs = [
+        "Diplom Betriebswirtschafter HF",
+        "DAS Controlling FHNW",
+        "SAP Zertifikat",
+        "Weitere Zertifikate 1",
+        "Weitere Zertifikate 2",
+    ]
     for doc_name in other_docs:
         doc_key = doc_name.lower().replace(" ", "_").replace("/", "_")
         doc_info = get_document(doc_key)
