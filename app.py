@@ -778,29 +778,23 @@ with tab3:
     
     st.markdown("---")
     st.markdown("### 🎓 Diplome & Zertifikate")
-    st.caption("Lade deine Abschlüsse und Zertifikate hoch — sie werden in deinem Profil gespeichert.")
 
-    other_docs = [
-        "Diplom Betriebswirtschafter HF",
-        "DAS Controlling FHNW",
-        "SAP Zertifikat",
-        "Weitere Zertifikate 1",
-        "Weitere Zertifikate 2",
-    ]
-    for doc_name in other_docs:
-        doc_key = doc_name.lower().replace(" ", "_").replace("/", "_")
-        doc_info = get_document(doc_key)
-        
-        col_a, col_b = st.columns([3, 1])
-        with col_a:
-            status = f"✅ {doc_info['filename']}" if doc_info else "– Noch nicht hochgeladen"
-            st.markdown(f"**{doc_name}:** {status}")
-        with col_b:
-            other_file = st.file_uploader(f"Upload", type=["pdf", "docx"], key=f"other_{doc_key}", label_visibility="collapsed")
-            if other_file:
-                save_document(other_file.name, other_file.read(), doc_key)
-                st.success("✅")
-                st.rerun()
+    diplom_doc = get_document("diplome")
+    if diplom_doc:
+        st.success(f"✅ Gespeichert: {diplom_doc['filename']}")
+        st.markdown(f"*Hochgeladen am: {diplom_doc['uploaded_at'][:10]}*")
+
+    diplom_file = st.file_uploader(
+        "Alle Diplome & Zertifikate als ein PDF hochladen",
+        type=["pdf"],
+        key="diplom_upload",
+        help="Scanne alle Diplome/Zertifikate in ein einziges PDF zusammen."
+    )
+
+    if diplom_file:
+        content = diplom_file.read()
+        save_document(diplom_file.name, content, "diplome")
+        st.success(f"✅ '{diplom_file.name}' gespeichert!")
 
 # ═══════════════════════════════════════════
 # TAB 4: AI Cover Letter
