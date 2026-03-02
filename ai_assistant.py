@@ -297,6 +297,97 @@ def generate_cover_letter_pdf(letter_text: str, filename: str = "Anschreiben.pdf
     return buffer.getvalue()
 
 
+def calculate_quick_score(job_title: str, job_company: str, job_location: str, cv_text: str) -> int:
+    """Fast local keyword-based match score (0-100) without API calls."""
+    import re
+
+    if not cv_text or not job_title:
+        return 0
+
+    cv_lower = cv_text.lower()
+    title_lower = job_title.lower()
+
+    # ── Relevant keywords for ERP/IT/Business roles ──
+    role_keywords = {
+        # Core roles (high weight)
+        "erp": 12, "sap": 10, "projektleiter": 12, "project manager": 10,
+        "business analyst": 12, "it consultant": 10, "consultant": 6,
+        "berater": 6, "it-projektleiter": 12, "it projektleiter": 12,
+        "projektmanager": 10, "projektmanagement": 8, "project management": 8,
+        # Technical skills
+        "business intelligence": 8, "bi": 4, "data warehouse": 6,
+        "sql": 5, "python": 5, "jira": 4, "confluence": 4,
+        "agile": 5, "scrum": 5, "itil": 4, "prince2": 4,
+        "requirements engineering": 6, "anforderungsanalyse": 6,
+        "prozessoptimierung": 6, "digitalisierung": 5,
+        "it-architektur": 6, "systemintegration": 6,
+        # ERP systems
+        "abacus": 8, "microsoft dynamics": 8, "dynamics 365": 8,
+        "navision": 7, "business central": 7, "oracle": 6,
+        "salesforce": 5, "netsuite": 5,
+        # Domain knowledge
+        "supply chain": 5, "logistik": 4, "finanzen": 4,
+        "rechnungswesen": 4, "controlling": 4, "hr": 3,
+        "fertigung": 4, "produktion": 4, "einkauf": 4,
+        # Soft skills / context
+        "führung": 4, "teamleitung": 5, "stakeholder": 4,
+        "migration": 5, "rollout": 5, "implementierung": 5,
+        "einführung": 5, "transformation": 5,
+    }
+
+    score = 0
+    max_possible = 0
+
+    # Check which keywords from the job title appear in the CV
+    title_words = set(re.findall(r'[a-zäöüß]+(?:[- ][a-zäöüß]+)*', title_lower))
+
+    for keyword, weight in role_keywords.items():
+        kw_lower = keyword.lower()
+        in_title = kw_lower in title_lower
+        in_cv = kw_lower in cv_lower
+
+        if in_title:
+            max_possible += weight
+            if in_cv:
+                score += weight  # Full match: keyword in both title and CV
+
+        elif in_cv:
+            # Keyword in CV but not in title — small bonus for general relevance
+            score += weight * 0.1
+
+    # ── Title word matching ──
+    # Check if individual title words appear in CV
+    title_bonus = 0
+    meaningful_words = [w for w in title_words if len(w) > 3 and w not in {"und", "oder", "für", "mit", "bei", "der", "die", "das", "ein", "eine"}]
+    for word in meaningful_words:
+        if word in cv_lower:
+            title_bonus += 3
+
+    score += title_bonus
+
+    # ── Location bonus (Deutschschweiz) ──
+    swiss_cities = ["zürich", "bern", "basel", "luzern", "winterthur", "st. gallen",
+                    "st.gallen", "aarau", "zug", "schaffhausen", "frauenfeld", "baden",
+                    "olten", "solothurn", "thun", "biel", "rapperswil", "wil", "chur"]
+    if job_location:
+        loc_lower = job_location.lower()
+        for city in swiss_cities:
+            if city in loc_lower:
+                score += 5
+                break
+
+    # Normalize to 0-100
+    if max_possible > 0:
+        # Weighted: 70% keyword match, 30% general relevance
+        keyword_ratio = min(score / max_possible, 1.0) if max_possible > 0 else 0
+        normalized = int(keyword_ratio * 100)
+    else:
+        # No role keywords found in title — use raw score capped
+        normalized = min(int(score * 2), 60)
+
+    return max(0, min(100, normalized))
+
+
 def calculate_match_score(
     job_description: str,
     cv_text: str,

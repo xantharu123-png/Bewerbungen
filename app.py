@@ -18,7 +18,8 @@ from scraper import search_multiple_platforms, get_job_details
 from drive_storage import is_drive_available
 from ai_assistant import (
     extract_text_from_pdf, extract_text_from_docx,
-    generate_cover_letter, generate_cover_letter_pdf, calculate_match_score
+    generate_cover_letter, generate_cover_letter_pdf, calculate_match_score,
+    calculate_quick_score
 )
 
 # ─────────────────────────────────────────────
@@ -563,15 +564,43 @@ with tab1:
     # Display search results
     if st.session_state.search_results:
         st.markdown(f"### Suchergebnisse ({len(st.session_state.search_results)} Stellen)")
-        
+
         existing_urls = {j["url"] for j in get_jobs()}
-        
-        for i, job in enumerate(st.session_state.search_results):
+        cv_text_for_score = st.session_state.get("cv_text", "")
+
+        # Calculate quick scores and sort by score
+        results_with_scores = []
+        for job in st.session_state.search_results:
+            if cv_text_for_score:
+                quick = calculate_quick_score(
+                    job.get("title", ""),
+                    job.get("company", ""),
+                    job.get("location", ""),
+                    cv_text_for_score
+                )
+            else:
+                quick = 0
+            results_with_scores.append((job, quick))
+
+        # Sort by score descending
+        results_with_scores.sort(key=lambda x: x[1], reverse=True)
+
+        for i, (job, quick_score) in enumerate(results_with_scores):
             already_saved = job["url"] in existing_urls
-            
+
             with st.container():
-                col_main, col_btn = st.columns([5, 1])
-                
+                col_score, col_main, col_btn = st.columns([0.6, 4.4, 1])
+
+                with col_score:
+                    if cv_text_for_score:
+                        s_color = "#16a34a" if quick_score >= 60 else "#f59e0b" if quick_score >= 30 else "#9ca3af"
+                        st.markdown(
+                            f'<div style="text-align:center;padding-top:12px;">'
+                            f'<div style="font-size:1.4rem;font-weight:700;color:{s_color};">{quick_score}%</div>'
+                            f'<div style="font-size:0.65rem;color:#a0917d;">Match</div></div>',
+                            unsafe_allow_html=True
+                        )
+
                 with col_main:
                     saved_badge = ' <span style="background:#16a34a;color:white;padding:2px 8px;border-radius:10px;font-size:0.7rem;">✓ Gespeichert</span>' if already_saved else ""
                     st.markdown(f"""
@@ -587,7 +616,7 @@ with tab1:
                         <a href="{job['url']}" target="_blank" style="color:#4a9eff;font-size:0.8rem;">🔗 Zum Inserat →</a>
                     </div>
                     """, unsafe_allow_html=True)
-                
+
                 with col_btn:
                     st.markdown("<br>", unsafe_allow_html=True)
                     if not already_saved:
@@ -754,8 +783,8 @@ with tab2:
         with col2:
             filter_search = st.text_input("🔎 Suchen", placeholder="Titel, Unternehmen...")
         with col3:
-            sort_by = st.selectbox("Sortieren", ["Datum (neu)", "Status", "Titel"])
-        
+            sort_by = st.selectbox("Sortieren", ["Datum (neu)", "Score", "Status", "Titel"])
+
         # Apply filters
         filtered = jobs
         if filter_status:
@@ -763,27 +792,47 @@ with tab2:
         if filter_search:
             q = filter_search.lower()
             filtered = [j for j in filtered if q in j.get("title", "").lower() or q in j.get("company", "").lower()]
-        
+
+        # Calculate quick scores for all jobs
+        cv_text_tracker = st.session_state.get("cv_text", "")
+        for job in filtered:
+            if not job.get("quick_score") and cv_text_tracker:
+                job["_quick_score"] = calculate_quick_score(
+                    job.get("title", ""), job.get("company", ""),
+                    job.get("location", ""), cv_text_tracker
+                )
+            else:
+                job["_quick_score"] = job.get("match_score", 0) or 0
+
         # Sort
         if sort_by == "Datum (neu)":
             filtered = sorted(filtered, key=lambda x: x.get("added_at", ""), reverse=True)
+        elif sort_by == "Score":
+            filtered = sorted(filtered, key=lambda x: x.get("match_score", 0) or x.get("_quick_score", 0), reverse=True)
         elif sort_by == "Status":
             filtered = sorted(filtered, key=lambda x: STATUS_OPTIONS.index(x.get("status", "Neu")))
         else:
             filtered = sorted(filtered, key=lambda x: x.get("title", ""))
-        
+
         st.markdown(f"**{len(filtered)} von {len(jobs)} Stellen**")
-        
+
         # Job list
         for job in filtered:
             status_color = STATUS_COLORS.get(job["status"], "#6c757d")
-            
+
+            # Determine display score: AI score preferred, else quick score
+            display_score = job.get("match_score") or job.get("_quick_score", 0)
+            score_emoji = "🟢" if display_score >= 60 else "🟡" if display_score >= 30 else "⚪" if display_score > 0 else ""
+            score_label = f" | {score_emoji} {display_score}%" if display_score > 0 and cv_text_tracker else ""
+
+            status_icon = '🟢' if job['status']=='Zusage' else '🔴' if job['status']=='Absage' else '🟡' if job['status']=='Interview' else '🔵' if job['status']=='Beworben' else '⚪'
+
             with st.expander(
-                f"{'🟢' if job['status']=='Zusage' else '🔴' if job['status']=='Absage' else '🟡' if job['status']=='Interview' else '🔵' if job['status']=='Beworben' else '⚪'}  {job['title']} — {job.get('company', '–')} | {job.get('location', '–')}",
+                f"{status_icon}  {job['title']} — {job.get('company', '–')} | {job.get('location', '–')}{score_label}",
                 expanded=False
             ):
                 col_left, col_right = st.columns([3, 2])
-                
+
                 with col_left:
                     st.markdown(f"**📍 Ort:** {job.get('location', '–')}")
                     st.markdown(f"**⏱️ Pensum:** {job.get('pensum', '–')}")
@@ -791,10 +840,10 @@ with tab2:
                     st.markdown(f"**📥 Hinzugefügt:** {job.get('added_at', '–')[:10]}")
                     if job.get("url"):
                         st.markdown(f"**🔗 Link:** [Zum Inserat]({job['url']})")
-                    if job.get("match_score"):
-                        score = job["match_score"]
-                        color_class = "score-high" if score >= 70 else "score-mid" if score >= 40 else "score-low"
-                        st.markdown(f"**🎯 Match-Score:** <span class='{color_class}'>{score}%</span>", unsafe_allow_html=True)
+                    if display_score > 0:
+                        s_color = "#16a34a" if display_score >= 60 else "#f59e0b" if display_score >= 30 else "#9ca3af"
+                        score_type = "KI" if job.get("match_score") else "Quick"
+                        st.markdown(f"**🎯 Match-Score ({score_type}):** <span style='color:{s_color};font-weight:700;'>{display_score}%</span>", unsafe_allow_html=True)
                 
                 with col_right:
                     new_status = st.selectbox(
