@@ -66,38 +66,10 @@ def generate_cover_letter(
 
     lang_instruction = "auf Deutsch" if language == "de" else "in English"
 
-    existing_section = f"""
-Als Referenz hier ein bestehendes Anschreiben des Bewerbers (Stil und Struktur beibehalten, aber auf die neue Stelle anpassen):
----
-{existing_letter[:2000]}
----
-""" if existing_letter else ""
-
-    # Build address block info
-    contact_info = ""
-    if contact_person:
-        contact_info += f"\nAnsprechperson: {contact_person}"
-    if company_address:
-        contact_info += f"\nAdresse des Unternehmens: {company_address}"
-
-    # Build recipient block
-    recipient_lines = []
-    if company:
-        recipient_lines.append(company)
-    if contact_person:
-        # Determine Frau/Herr from name if possible
-        recipient_lines.append(f"z.Hd. {contact_person}")
-    if company_address:
-        recipient_lines.append(company_address)
-
-    recipient_block = "\n".join(recipient_lines) if recipient_lines else company or "Firma"
-
     # Determine greeting
     if contact_person:
-        # Try to detect gender from name
         name_parts = contact_person.strip().split()
         first_name = name_parts[0] if name_parts else ""
-        last_name = name_parts[-1] if len(name_parts) > 1 else contact_person
         if first_name.lower() in ["frau", "fr."]:
             greeting = f"Sehr geehrte Frau {' '.join(name_parts[1:])}"
         elif first_name.lower() in ["herr", "hr."]:
@@ -107,7 +79,45 @@ Als Referenz hier ein bestehendes Anschreiben des Bewerbers (Stil und Struktur b
     else:
         greeting = "Sehr geehrte Damen und Herren"
 
-    prompt = f"""Schreibe ein professionelles Schweizer Bewerbungsschreiben {lang_instruction}.
+    # ── Two modes: TEMPLATE mode (if existing letter) or FREE mode ──
+    if existing_letter and len(existing_letter.strip()) > 100:
+        # TEMPLATE MODE: Use existing letter as exact template
+        prompt = f"""Du erhältst eine VORLAGE eines Bewerbungsschreibens und eine neue Stellenanzeige.
+
+**DEINE AUFGABE:** Passe die Vorlage auf die neue Stelle an. Behalte dabei:
+- EXAKT die gleiche Struktur und Anzahl Absätze
+- EXAKT den gleichen Schreibstil und Tonfall
+- EXAKT die gleiche Länge (ungefähr gleich viele Sätze pro Absatz)
+- Die gleiche Art, wie der Bewerber sich vorstellt und argumentiert
+
+Ändere NUR die stellenspezifischen Inhalte:
+- Bezug zur neuen Stelle statt zur alten
+- Relevante Erfahrungen/Kompetenzen für DIESE Stelle hervorheben
+- Firmenname und Stellentitel anpassen
+- Anrede anpassen
+
+**VORLAGE (diese Struktur und Stil EXAKT beibehalten):**
+---
+{existing_letter[:3000]}
+---
+
+**NEUE STELLE:**
+Stelle: {job_title}
+Unternehmen: {company}
+Beschreibung: {job_description[:2000]}
+
+**Lebenslauf (für relevante Details):**
+{cv_text[:1500]}
+
+**AUSGABE-REGELN:**
+- Beginne mit: "{greeting}"
+- Ende mit: "Freundliche Grüsse" und "Miroslav Mikulic"
+- KEIN Briefkopf, KEINE Adresse, KEIN Datum, KEIN Betreff — nur der Brieftext
+- Gib NUR den fertigen Brieftext zurück, keine Kommentare"""
+
+    else:
+        # FREE MODE: Generate from scratch
+        prompt = f"""Schreibe ein professionelles Schweizer Bewerbungsschreiben {lang_instruction}.
 
 **Stellenanzeige:**
 Stelle: {job_title}
@@ -116,8 +126,6 @@ Beschreibung: {job_description[:2000]}
 
 **Lebenslauf des Bewerbers:**
 {cv_text[:2000]}
-
-{existing_section}
 
 **WICHTIG — Gib NUR den Brieftext zurück, EXAKT in diesem Format:**
 
