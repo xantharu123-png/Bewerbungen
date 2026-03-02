@@ -190,18 +190,6 @@ with st.sidebar:
     st.markdown("### ⚙️ Einstellungen")
     settings = get_settings()
     
-    api_key = st.text_input(
-        "Anthropic API Key",
-        value=settings.get("api_key", ""),
-        type="password",
-        help="Für KI-Anschreiben & Match-Score"
-    )
-    
-    if api_key != settings.get("api_key", ""):
-        settings["api_key"] = api_key
-        save_settings(settings)
-        st.success("✓ Gespeichert")
-    
     st.markdown("---")
     st.markdown("### 🔍 Standard-Suche")
     st.caption("Die Jobprofile kannst du direkt im Tab 'Stellensuche' per Multiselect auswählen.")
@@ -710,10 +698,6 @@ with tab4:
     st.markdown("## 🤖 KI-Anschreiben Generator")
     
     settings = get_settings()
-    api_key = settings.get("api_key", "")
-    
-    if not api_key:
-        st.warning("⚠️ Bitte zuerst den Anthropic API Key in den Einstellungen (Sidebar) eintragen.")
     
     # Pre-fill from selected job in tracker
     if st.session_state.selected_job_for_ai:
@@ -788,14 +772,14 @@ with tab4:
             "✍️ Anschreiben generieren",
             type="primary",
             use_container_width=True,
-            disabled=not (api_key and ai_title and ai_job_desc and cv_available)
+            disabled=not (ai_title and ai_job_desc and cv_available)
         )
     
     with col_score:
         score_btn = st.button(
             "🎯 Match-Score berechnen",
             use_container_width=True,
-            disabled=not (api_key and ai_job_desc and cv_available)
+            disabled=not (ai_job_desc and cv_available)
         )
     
     if generate_btn:
@@ -811,8 +795,7 @@ with tab4:
                     job_description=ai_job_desc,
                     cv_text=cv_with_extra,
                     existing_letter=st.session_state.cover_letter_text,
-                    language=lang_code,
-                    api_key=api_key
+                    language=lang_code
                 )
                 st.session_state["generated_letter"] = result
                 st.success("✅ Anschreiben generiert!")
@@ -824,8 +807,7 @@ with tab4:
             try:
                 score_result = calculate_match_score(
                     job_description=ai_job_desc,
-                    cv_text=st.session_state.cv_text,
-                    api_key=api_key
+                    cv_text=st.session_state.cv_text
                 )
                 st.session_state["score_result"] = score_result
                 

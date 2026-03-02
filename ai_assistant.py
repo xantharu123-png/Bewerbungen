@@ -1,7 +1,31 @@
 import anthropic
 import PyPDF2
 import io
+import os
 from pathlib import Path
+
+# API Key aus Environment Variable oder Streamlit Secrets
+def _load_api_key() -> str:
+    """Load API key from environment or Streamlit secrets."""
+    # 1. Environment variable (lokal oder Streamlit Cloud)
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if key:
+        return key
+    # 2. Streamlit secrets (secrets.toml oder Cloud Secrets)
+    try:
+        import streamlit as st
+        key = st.secrets.get("ANTHROPIC_API_KEY", "")
+        if key:
+            return key
+    except Exception:
+        pass
+    return ""
+
+ANTHROPIC_API_KEY = _load_api_key()
+
+def _get_client() -> anthropic.Anthropic:
+    """Create Anthropic client with the configured API key."""
+    return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     """Extract text from PDF bytes."""
@@ -34,8 +58,8 @@ def generate_cover_letter(
     api_key: str = ""
 ) -> str:
     """Generate a tailored cover letter using Claude API."""
-    
-    client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+
+    client = _get_client()
     
     lang_instruction = "auf Deutsch" if language == "de" else "in English"
     
@@ -82,8 +106,8 @@ def calculate_match_score(
     api_key: str = ""
 ) -> dict:
     """Calculate how well a candidate matches a job posting."""
-    
-    client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+
+    client = _get_client()
     
     prompt = f"""Analysiere die Übereinstimmung zwischen diesem Stelleninserat und dem Lebenslauf.
 
