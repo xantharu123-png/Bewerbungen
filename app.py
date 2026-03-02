@@ -15,7 +15,7 @@ from database import (
     STATUS_OPTIONS, STATUS_COLORS
 )
 from scraper import search_multiple_platforms, get_job_details
-from drive_storage import is_drive_available, test_drive_connection, verify_file_on_drive
+from drive_storage import is_drive_available, test_drive_connection
 from ai_assistant import (
     extract_text_from_pdf, extract_text_from_docx,
     generate_cover_letter, generate_cover_letter_pdf, calculate_match_score,
