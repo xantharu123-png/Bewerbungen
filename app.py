@@ -292,7 +292,7 @@ with st.sidebar:
 
     default_days = st.slider(
         "Inserate der letzten X Tage",
-        min_value=3, max_value=60, value=settings.get("default_days", 14)
+        min_value=3, max_value=60, value=settings.get("default_days", 7)
     )
 
     if st.button("💾 Einstellungen speichern", use_container_width=True):
@@ -432,7 +432,7 @@ with tab1:
     with col_days:
         days_filter = st.number_input(
             "Tage zurück",
-            min_value=1, max_value=60, value=14,
+            min_value=1, max_value=60, value=7,
             key="days_filter_input"
         )
 
