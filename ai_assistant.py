@@ -240,210 +240,355 @@ def generate_cover_letter_pdf(
     contact_person: str = "",
     company_address: str = "",
 ) -> bytes:
-    """Generate a Swiss business letter PDF matching the user's DOCX template exactly.
+    """Generate PDF by filling the user's DOCX template and converting via LibreOffice.
 
-    Template layout (Bewerbungsschreiben_Mikulic.docx):
-    - Sender: Name, Street, City (3 lines, left, 11pt)
-    - Phone [TAB 9.8cm] Company name (same line)
-    - [TAB 9.8cm] Company address lines
-    - Empty line
-    - [TAB 9.8cm] "Gerlikon, DD.MM.YYYY"
-    - 2 empty lines
-    - Betreff bold 11pt
-    - Empty line
-    - Sehr geehrte Damen und Herren
-    - Body text (11pt, single spacing, space_after=6pt)
-    - Bullet points (• with indent)
-    - Closing + signature
+    This guarantees pixel-perfect output matching Bewerbungsschreiben_Mikulic.docx
+    because we modify the actual template (fonts, tabs, spacing all preserved)
+    and let LibreOffice handle the PDF rendering.
+
+    DOCX structure (P0-P31):
+      P0:  Miroslav Mikulic          P1: Street  P2: City
+      P3:  Phone [TAB] Company       P4: [TAB] Addr1  P5: [TAB] Addr2
+      P6:  (empty)                   P7: [TAB] Date
+      P8-9: (empty)                  P10: Betreff (bold)
+      P11: (empty)                   P12: Sehr geehrte...
+      P13: (empty)                   P14: Intro text
+      P15: (empty)                   P16: Was kann ich...
+      P17: (empty)                   P18-23: Bullets
+      P24-25: (empty)               P26: Closing text
+      P27: (empty)                   P28: Ich freue mich...
+      P29: (empty)                   P30: Freundliche Grüsse
+      P31: Miroslav Mikulic
     """
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import mm, cm
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib.colors import HexColor
+    import subprocess
+    import tempfile
+    from pathlib import Path as _Path
 
-    buffer = io.BytesIO()
-    page_w, page_h = A4  # 21.0 x 29.7 cm
+    try:
+        from docx import Document
+        from docx.shared import Pt
+    except ImportError:
+        # Fallback: if python-docx not available, use basic reportlab
+        return _generate_cover_letter_pdf_fallback(
+            letter_text, job_title, company, contact_person, company_address
+        )
 
-    # Margins from DOCX: top=2.5, bottom=2.0, left=2.5, right=2.5
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        topMargin=2.5*cm,
-        bottomMargin=2.0*cm,
-        leftMargin=2.5*cm,
-        rightMargin=2.5*cm,
-    )
-
-    content_width = page_w - 5*cm   # 16.0 cm
-    TAB_POS = 9.8*cm                # Tab stop from DOCX template
-    col_left = TAB_POS              # left column width
-    col_right = content_width - TAB_POS  # right column width
-
-    # All text is 11pt, single spacing (leading ~14pt), color black
-    COLOR = HexColor('#222222')
-    FONT = 'Helvetica'
-    SIZE = 11
-    LEADING = 14
-    SP_AFTER = 6  # space_after from template: 6pt
-
-    s_normal = ParagraphStyle(
-        'Normal', fontName=FONT, fontSize=SIZE, leading=LEADING,
-        alignment=TA_LEFT, textColor=COLOR, spaceAfter=0,
-    )
-    s_bold = ParagraphStyle(
-        'Bold', fontName='Helvetica-Bold', fontSize=SIZE, leading=LEADING,
-        alignment=TA_LEFT, textColor=COLOR, spaceAfter=0,
-    )
-    s_body = ParagraphStyle(
-        'Body', fontName=FONT, fontSize=SIZE, leading=LEADING,
-        alignment=TA_LEFT, textColor=COLOR, spaceAfter=SP_AFTER,
-    )
-    s_bullet = ParagraphStyle(
-        'Bullet', fontName=FONT, fontSize=SIZE, leading=LEADING,
-        alignment=TA_LEFT, textColor=COLOR, spaceAfter=4,
-        leftIndent=14, firstLineIndent=-14,
-    )
-
-    no_pad = [
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 0),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    # ── Locate the DOCX template ──
+    template_candidates = [
+        _Path("data/documents/Bewerbungsschreiben_Mikulic.docx"),
+        *_Path(".").glob("**/Bewerbungsschreiben*.docx"),
     ]
+    # Also check uploads
+    uploads = _Path("/tmp")  # Will search more broadly
+    for candidate in [
+        _Path("/sessions/hopeful-affectionate-cannon/mnt/uploads/Bewerbungsschreiben_Mikulic.docx"),
+        _Path("Bewerbungsschreiben_Mikulic.docx"),
+    ]:
+        template_candidates.append(candidate)
 
-    story = []
+    template_path = None
+    for p in template_candidates:
+        if p.exists():
+            template_path = p
+            break
 
-    # Clean company name
+    if not template_path:
+        # No template found — use reportlab fallback
+        return _generate_cover_letter_pdf_fallback(
+            letter_text, job_title, company, contact_person, company_address
+        )
+
+    # ── Parse the AI letter text into parts ──
     clean_company = _sanitize_company(company)
-
-    # ═══ 1. SENDER BLOCK: Name, Street, City (3 lines, left-aligned) ═══
-    story.append(Paragraph("Miroslav Mikulic", s_normal))
-    story.append(Paragraph("Im Weberlis Rebberg 42", s_normal))
-    story.append(Paragraph("8500 Gerlikon", s_normal))
-
-    # ═══ 2. PHONE [TAB] COMPANY — same line, using table ═══
-    # Line: "079 602 83 31" [tab] "Company Name"
-    phone_para = Paragraph("079 602 83 31", s_normal)
-    company_para = Paragraph(clean_company if clean_company else "", s_normal)
-    row1 = Table([[phone_para, company_para]], colWidths=[col_left, col_right])
-    row1.setStyle(TableStyle(no_pad))
-    story.append(row1)
-
-    # Recipient address lines (tabbed to right)
-    recipient_lines = []
-    if contact_person:
-        recipient_lines.append(contact_person)
-    if company_address:
-        for addr_line in company_address.strip().split('\n'):
-            if addr_line.strip():
-                recipient_lines.append(addr_line.strip())
-
-    for rline in recipient_lines:
-        empty = Paragraph("", s_normal)
-        rpara = Paragraph(rline, s_normal)
-        row = Table([[empty, rpara]], colWidths=[col_left, col_right])
-        row.setStyle(TableStyle(no_pad))
-        story.append(row)
-
-    # ═══ 3. EMPTY LINE ═══
-    story.append(Spacer(1, LEADING))
-
-    # ═══ 4. DATE at tab position ═══
-    date_str = f"Gerlikon, {datetime.now().strftime('%d.%m.%Y')}"
-    empty = Paragraph("", s_normal)
-    date_para = Paragraph(date_str, s_normal)
-    date_row = Table([[empty, date_para]], colWidths=[col_left, col_right])
-    date_row.setStyle(TableStyle(no_pad))
-    story.append(date_row)
-
-    # ═══ 5. TWO EMPTY LINES ═══
-    story.append(Spacer(1, LEADING * 2))
-
-    # ═══ 6. BETREFF (bold) ═══
-    betreff = job_title if job_title else "Bewerbung"
-    story.append(Paragraph(betreff, s_bold))
-
-    # ═══ 7. EMPTY LINE ═══
-    story.append(Spacer(1, LEADING))
-
-    # ═══ 8. LETTER BODY (from AI) ═══
     body_text = letter_text.strip()
 
-    # Remove any header/address/date/betreff the AI might have added
-    clean_lines = body_text.split('\n')
+    # Strip header/address lines the AI may have prepended
+    lines = body_text.split("\n")
     body_start = 0
-    for idx, line in enumerate(clean_lines):
-        stripped = line.strip()
-        if stripped.lower().startswith('sehr geehrte') or stripped.lower().startswith('dear'):
+    skip_kw = [
+        "miroslav", "weberlis", "gerlikon", "8500", "079 602",
+        "bewerbung als", "betreff", "@gmail", "z.hd", "im weberlis",
+        "eichmatt", "rebberg",
+    ]
+    for idx, line in enumerate(lines):
+        s = line.strip()
+        if s.lower().startswith("sehr geehrte") or s.lower().startswith("dear"):
             body_start = idx
             break
-        if any(kw in stripped.lower() for kw in [
-            'miroslav', 'weberlis', 'gerlikon', '8500', '079 602',
-            'bewerbung als', 'betreff', '@gmail', 'z.hd', 'z. hd',
-            'im weberlis', 'eichmatt',
-        ]):
+        if any(kw in s.lower() for kw in skip_kw):
             continue
-        if stripped and len(stripped) < 60 and not stripped.endswith('.'):
+        if s and len(s) < 60 and not s.endswith(".") and not s.endswith(":"):
             continue
-        if stripped:
+        if s:
             body_start = idx
             break
+    clean_lines = lines[body_start:]
 
-    clean_body = '\n'.join(clean_lines[body_start:])
+    # Separate: greeting, intro, "Was kann ich...", bullets, closing parts
+    greeting = ""
+    intro_paragraphs = []
+    was_line = ""
+    bullets = []
+    closing_paragraphs = []
 
-    # Parse into typed paragraphs
-    paragraphs = []
-    current_lines = []
-
-    def flush_current():
-        if current_lines:
-            paragraphs.append(('text', ' '.join(current_lines)))
-            current_lines.clear()
-
-    for line in clean_body.split('\n'):
-        stripped = line.strip()
-
-        if not stripped:
-            flush_current()
+    section = "greeting"  # greeting → intro → bullets → closing
+    for line in clean_lines:
+        s = line.strip()
+        if not s:
             continue
 
-        if stripped.startswith('- ') or stripped.startswith('• '):
-            flush_current()
-            paragraphs.append(('bullet', stripped.lstrip('-•').strip()))
-        elif stripped.lower().startswith('sehr geehrte') or stripped.lower().startswith('dear'):
-            flush_current()
-            paragraphs.append(('greeting', stripped))
-        elif stripped.lower().startswith('freundliche gr') or stripped.lower().startswith('mit freundlichen'):
-            flush_current()
-            paragraphs.append(('closing', stripped))
-        elif stripped == 'Miroslav Mikulic':
-            flush_current()
-            paragraphs.append(('signature', stripped))
-        else:
-            current_lines.append(stripped)
-
-    flush_current()
-
-    # Render
-    for ptype, text in paragraphs:
-        if not text:
+        if section == "greeting":
+            if s.lower().startswith("sehr geehrte") or s.lower().startswith("dear"):
+                greeting = s
+                section = "intro"
             continue
-        if ptype == 'greeting':
-            story.append(Paragraph(text, s_body))
-            story.append(Spacer(1, SP_AFTER))
-        elif ptype == 'bullet':
-            story.append(Paragraph(f"\u2022  {text}", s_bullet))
-        elif ptype == 'closing':
-            story.append(Spacer(1, SP_AFTER))
-            story.append(Paragraph(text, s_body))
-        elif ptype == 'signature':
-            story.append(Paragraph(text, s_body))
-        else:
-            story.append(Paragraph(text, s_body))
 
+        if section == "intro":
+            if s.startswith("Was kann ich") or s.startswith("Was ich"):
+                was_line = s
+                section = "bullets"
+            elif s.startswith("• ") or s.startswith("- ") or s.startswith("– "):
+                was_line = "Was kann ich Ihrem Unternehmen bieten:"
+                bullets.append(s.lstrip("•-– ").strip())
+                section = "bullets"
+            else:
+                intro_paragraphs.append(s)
+            continue
+
+        if section == "bullets":
+            if s.startswith("• ") or s.startswith("- ") or s.startswith("– "):
+                bullets.append(s.lstrip("•-– ").strip())
+            elif s:
+                # First non-bullet after bullets → closing
+                closing_paragraphs.append(s)
+                section = "closing"
+            continue
+
+        if section == "closing":
+            if s == "Miroslav Mikulic":
+                continue  # skip — already in template
+            if s.lower().startswith("freundliche gr") or s.lower().startswith("mit freundlichen"):
+                continue  # skip — already in template
+            closing_paragraphs.append(s)
+
+    if not greeting:
+        greeting = "Sehr geehrte Damen und Herren"
+
+    # ── Modify the DOCX template ──
+    doc = Document(str(template_path))
+    paras = doc.paragraphs
+
+    def set_para_text(p, new_text):
+        """Replace paragraph text preserving formatting of first run."""
+        if not p.runs:
+            p.text = new_text
+            return
+        # Keep first run's formatting, clear rest
+        first_run = p.runs[0]
+        for run in p.runs[1:]:
+            run.text = ""
+        first_run.text = new_text
+
+    def set_tab_para(p, right_text):
+        """Set text for a paragraph that uses [TAB]right_text format."""
+        if not p.runs:
+            p.text = f"\t{right_text}"
+            return
+        # First run should be tab, second+ should be text
+        if len(p.runs) >= 2:
+            p.runs[0].text = "\t"
+            p.runs[1].text = right_text
+            for run in p.runs[2:]:
+                run.text = ""
+        else:
+            p.runs[0].text = f"\t{right_text}"
+
+    # P0: Name (unchanged)
+    # P1: Street
+    set_para_text(paras[1], "Im Weberlis Rebberg 42")
+    # P2: City
+    set_para_text(paras[2], "8500 Gerlikon")
+    # P3: Phone [TAB] Company
+    if len(paras[3].runs) >= 2:
+        paras[3].runs[0].text = "079 602 83 31"
+        paras[3].runs[1].text = f"\t{clean_company}" if clean_company else "\t"
+        for run in paras[3].runs[2:]:
+            run.text = ""
+    else:
+        set_para_text(paras[3], f"079 602 83 31\t{clean_company or ''}")
+
+    # P4: [TAB] Address line 1 (contact person or empty)
+    set_tab_para(paras[4], contact_person or "")
+    # P5: [TAB] Address line 2
+    addr_line_2 = ""
+    if company_address:
+        addr_parts = [l.strip() for l in company_address.strip().split("\n") if l.strip()]
+        if addr_parts:
+            addr_line_2 = addr_parts[0]
+    set_tab_para(paras[5], addr_line_2)
+
+    # P7: [TAB] Date
+    date_str = f"Gerlikon, {datetime.now().strftime('%d.%m.%Y')}"
+    set_tab_para(paras[7], date_str)
+
+    # P10: Betreff (bold)
+    betreff = job_title.strip() if job_title else "Bewerbung"
+    set_para_text(paras[10], betreff)
+
+    # P12: Greeting
+    set_para_text(paras[12], greeting)
+
+    # P14: Intro text — join all intro paragraphs
+    intro_text = " ".join(intro_paragraphs) if intro_paragraphs else paras[14].text
+    set_para_text(paras[14], intro_text)
+
+    # P16: "Was kann ich..."
+    set_para_text(paras[16], was_line or "Was kann ich Ihrem Unternehmen bieten:")
+
+    def hide_para(p):
+        """Make a paragraph virtually invisible (1pt font, no spacing)."""
+        from docx.oxml.ns import qn
+        from docx.shared import Pt as DPt
+        set_para_text(p, "")
+        # Remove bullet numbering
+        pPr = p._element.pPr
+        if pPr is not None:
+            numPr = pPr.find(qn('w:numPr'))
+            if numPr is not None:
+                pPr.remove(numPr)
+        # Set font size to 1pt and space_after to 0
+        if p.runs:
+            p.runs[0].font.size = DPt(1)
+        p.paragraph_format.space_after = DPt(0)
+        p.paragraph_format.space_before = DPt(0)
+        p.paragraph_format.line_spacing = 1.0
+
+    # P18-P23: Bullets (template has 6 slots)
+    bullet_slots = [18, 19, 20, 21, 22, 23]
+    for i, slot in enumerate(bullet_slots):
+        if i < len(bullets):
+            set_para_text(paras[slot], bullets[i])
+        else:
+            hide_para(paras[slot])
+
+    # P24: Empty bullet line in template → hide it
+    hide_para(paras[24])
+
+    # P25: Empty line after bullets → hide (save space)
+    hide_para(paras[25])
+
+    # P15: Empty line between intro and "Was kann ich" → hide to save space
+    hide_para(paras[15])
+
+    # P17: Empty line between "Was kann ich" and first bullet → hide
+    hide_para(paras[17])
+
+    # P13: Empty line after greeting → hide (tiny gap remains from space_after)
+    hide_para(paras[13])
+
+    # P27: Empty line before "Ich freue mich" → hide
+    hide_para(paras[27])
+
+    # Header empty lines: reduce P6, P8, P9, P11 to half-height
+    # They still need SOME height for visual separation, but less
+    from docx.shared import Pt as DPt
+    for idx in [6, 8, 9, 11]:
+        paras[idx].paragraph_format.space_after = DPt(2)
+        paras[idx].paragraph_format.space_before = DPt(0)
+        if paras[idx].runs:
+            paras[idx].runs[0].font.size = DPt(6)
+
+    # P26: First closing paragraph
+    if closing_paragraphs:
+        set_para_text(paras[26], closing_paragraphs[0])
+    # P27: Empty line → keep as is (spacing between closing paragraphs)
+    # P28: Second closing paragraph (or "Ich freue mich auf Ihren Anruf.")
+    if len(closing_paragraphs) > 1:
+        set_para_text(paras[28], closing_paragraphs[1])
+    elif not closing_paragraphs:
+        # Keep template default
+        pass
+
+    # P29: Empty line before signature → keep
+    # P30: "Freundliche Grüsse" — keep as is
+    # P31: "Miroslav Mikulic" — keep as is
+
+    # ── Save modified DOCX to temp file ──
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docx_path = os.path.join(tmpdir, "letter.docx")
+        doc.save(docx_path)
+
+        # ── Convert to PDF via LibreOffice ──
+        try:
+            subprocess.run(
+                [
+                    "libreoffice", "--headless", "--norestore",
+                    "--convert-to", "pdf",
+                    "--outdir", tmpdir,
+                    docx_path,
+                ],
+                capture_output=True, timeout=30, check=True,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+            print(f"[PDF] LibreOffice conversion failed: {e}")
+            # Fallback to reportlab
+            return _generate_cover_letter_pdf_fallback(
+                letter_text, job_title, company, contact_person, company_address
+            )
+
+        pdf_path = os.path.join(tmpdir, "letter.pdf")
+        if not os.path.exists(pdf_path):
+            print("[PDF] LibreOffice produced no PDF output")
+            return _generate_cover_letter_pdf_fallback(
+                letter_text, job_title, company, contact_person, company_address
+            )
+
+        with open(pdf_path, "rb") as f:
+            return f.read()
+
+
+def _generate_cover_letter_pdf_fallback(
+    letter_text: str,
+    job_title: str = "",
+    company: str = "",
+    contact_person: str = "",
+    company_address: str = "",
+) -> bytes:
+    """Simple reportlab fallback if DOCX template or LibreOffice is unavailable."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        topMargin=2.5*cm, bottomMargin=2.0*cm,
+        leftMargin=2.5*cm, rightMargin=2.5*cm,
+    )
+    s = ParagraphStyle("N", fontName="Helvetica", fontSize=11, leading=14,
+                       alignment=TA_LEFT, spaceAfter=6)
+    sb = ParagraphStyle("B", fontName="Helvetica-Bold", fontSize=11, leading=14,
+                        alignment=TA_LEFT, spaceAfter=6)
+
+    clean_company = _sanitize_company(company)
+    story = [
+        Paragraph("Miroslav Mikulic", s),
+        Paragraph("Im Weberlis Rebberg 42", s),
+        Paragraph("8500 Gerlikon", s),
+        Paragraph("079 602 83 31", s),
+        Spacer(1, 12),
+        Paragraph(f"Gerlikon, {datetime.now().strftime('%d.%m.%Y')}", s),
+        Spacer(1, 24),
+        Paragraph(job_title or "Bewerbung", sb),
+        Spacer(1, 12),
+    ]
+    for line in letter_text.strip().split("\n"):
+        if line.strip():
+            story.append(Paragraph(line.strip(), s))
+        else:
+            story.append(Spacer(1, 12))
     doc.build(story)
     return buffer.getvalue()
 

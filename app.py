@@ -19,7 +19,7 @@ from drive_storage import is_drive_available, test_drive_connection
 from ai_assistant import (
     extract_text_from_pdf, extract_text_from_docx,
     generate_cover_letter, generate_cover_letter_pdf, calculate_match_score,
-    calculate_quick_score
+    calculate_quick_score, _sanitize_company
 )
 
 # ─────────────────────────────────────────────
@@ -665,7 +665,7 @@ with tab1:
                                 company=job.get('company', ''),
                                 contact_person=contact_person,
                             )
-                            company_clean = job.get('company', 'Firma').replace(' ', '_').replace('/', '-')
+                            company_clean = _sanitize_company(job.get('company', 'Firma')).replace(' ', '_').replace('/', '-')[:40]
                             pdf_filename = f"Anschreiben_{company_clean}.pdf"
                         except Exception as e:
                             pdf_bytes = None
@@ -1279,7 +1279,7 @@ with tab4:
                 company=ai_company,
                 contact_person=ai_contact,
             )
-            company_clean = ai_company.replace(' ', '_').replace('/', '-') if ai_company else "Firma"
+            company_clean = _sanitize_company(ai_company).replace(' ', '_').replace('/', '-')[:40] if ai_company else "Firma"
             pdf_filename = f"Anschreiben_{company_clean}.pdf"
         except Exception as e:
             pdf_bytes = None
