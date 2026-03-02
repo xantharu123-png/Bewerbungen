@@ -145,14 +145,19 @@ def test_drive_connection() -> tuple[bool, str]:
         results = service.files().list(
             q=f"'{folder_id}' in parents and trashed=false",
             spaces="drive",
-            fields="files(id, name, size)",
+            fields="files(id, name, mimeType, size)",
             pageSize=10,
             supportsAllDrives=True,
             includeItemsFromAllDrives=True,
         ).execute()
         files = results.get("files", [])
-        file_names = [f.get("name", "?") for f in files[:5]]
-        return True, f"Verbunden — {len(files)} Datei(en): {', '.join(file_names)}"
+        # Show only real files, skip folders
+        real_files = [f for f in files if f.get("mimeType") != "application/vnd.google-apps.folder"]
+        file_names = [f.get("name", "?") for f in real_files[:5]]
+        if real_files:
+            return True, f"Verbunden — {len(real_files)} Datei(en): {', '.join(file_names)}"
+        else:
+            return True, "Verbunden — Daten werden synchronisiert"
     except Exception as e:
         error_msg = str(e)
         if "accessNotConfigured" in error_msg or "API has not been" in error_msg:
