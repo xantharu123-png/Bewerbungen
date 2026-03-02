@@ -124,6 +124,52 @@ def is_drive_available() -> bool:
     return service is not None and bool(folder_id)
 
 
+def test_drive_connection() -> tuple[bool, str]:
+    """Actually test the Drive connection with a real API call.
+
+    Returns (success, message) — use this to show status in the UI.
+    """
+    if not GOOGLE_AVAILABLE:
+        return False, "Google API Bibliotheken nicht installiert"
+
+    service = _get_service()
+    if not service:
+        return False, "Service Account Credentials nicht gefunden"
+
+    folder_id = _get_folder_id()
+    if not folder_id:
+        return False, "GOOGLE_DRIVE_FOLDER_ID nicht konfiguriert"
+
+    try:
+        # Actually list files to verify the connection works
+        results = service.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            spaces="drive",
+            fields="files(id, name)",
+            pageSize=5
+        ).execute()
+        files = results.get("files", [])
+        return True, f"Verbunden — {len(files)} Datei(en) im Ordner"
+    except Exception as e:
+        error_msg = str(e)
+        if "accessNotConfigured" in error_msg or "API has not been" in error_msg:
+            return False, "Google Drive API nicht aktiviert im GCP Projekt"
+        if "403" in error_msg:
+            return False, "Kein Zugriff auf den Drive-Ordner (Berechtigung fehlt)"
+        if "404" in error_msg:
+            return False, "Drive-Ordner nicht gefunden (ID falsch?)"
+        return False, f"Drive Fehler: {error_msg[:100]}"
+
+
+def verify_file_on_drive(filename: str) -> bool:
+    """Check if a specific file exists on Drive."""
+    service = _get_service()
+    folder_id = _get_folder_id()
+    if not service or not folder_id:
+        return False
+    return _find_file(service, folder_id, filename) is not None
+
+
 def _find_file(service, folder_id: str, filename: str):
     """Find a file by name in the target folder. Returns file ID or None."""
     try:

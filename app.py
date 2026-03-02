@@ -15,7 +15,7 @@ from database import (
     STATUS_OPTIONS, STATUS_COLORS
 )
 from scraper import search_multiple_platforms, get_job_details
-from drive_storage import is_drive_available
+from drive_storage import is_drive_available, test_drive_connection, verify_file_on_drive
 from ai_assistant import (
     extract_text_from_pdf, extract_text_from_docx,
     generate_cover_letter, generate_cover_letter_pdf, calculate_match_score,
@@ -937,12 +937,24 @@ with tab3:
 
     # Count uploaded
     uploaded_count = sum(1 for d in docs_config if d["doc"])
+
+    # Drive status check
+    drive_connected, drive_status_msg = test_drive_connection()
+    if drive_connected:
+        drive_badge = f'<span style="color:#16a34a;font-size:0.82rem;">☁️ {drive_status_msg}</span>'
+    else:
+        drive_badge = f'<span style="color:#dc3545;font-size:0.82rem;">⚠️ {drive_status_msg}</span>'
+
     st.markdown(
         f'<div style="background:#ffffff;border:1px solid #e5ddd0;border-radius:10px;padding:14px 20px;margin-bottom:16px;'
-        f'box-shadow:0 1px 3px rgba(0,0,0,0.04);display:flex;align-items:center;gap:12px;">'
+        f'box-shadow:0 1px 3px rgba(0,0,0,0.04);">'
+        f'<div style="display:flex;align-items:center;justify-content:space-between;">'
+        f'<div style="display:flex;align-items:center;gap:12px;">'
         f'<span style="font-size:1.3rem;">📂</span>'
         f'<span style="color:#2d2417;font-weight:600;">{uploaded_count} von 4 Dokumenten hochgeladen</span>'
-        f'</div>',
+        f'</div>'
+        f'{drive_badge}'
+        f'</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -972,7 +984,7 @@ with tab3:
                 )
                 if new_file:
                     content = new_file.read()
-                    save_document(new_file.name, content, cfg["key"])
+                    drive_ok, drive_msg = save_document(new_file.name, content, cfg["key"])
                     if cfg["key"] == "cv":
                         if new_file.name.endswith(".pdf"):
                             st.session_state.cv_text = extract_text_from_pdf(content)
@@ -984,6 +996,10 @@ with tab3:
                         else:
                             st.session_state.cover_letter_text = extract_text_from_docx(content)
                     st.success(f"'{new_file.name}' aktualisiert!")
+                    if drive_ok:
+                        st.info(drive_msg)
+                    else:
+                        st.warning(drive_msg)
         else:
             # ── Document not yet uploaded: show upload area ──
             st.markdown(
@@ -1003,7 +1019,7 @@ with tab3:
             )
             if new_file:
                 content = new_file.read()
-                save_document(new_file.name, content, cfg["key"])
+                drive_ok, drive_msg = save_document(new_file.name, content, cfg["key"])
                 if cfg["key"] == "cv":
                     if new_file.name.endswith(".pdf"):
                         st.session_state.cv_text = extract_text_from_pdf(content)
@@ -1015,6 +1031,10 @@ with tab3:
                     else:
                         st.session_state.cover_letter_text = extract_text_from_docx(content)
                 st.success(f"'{new_file.name}' gespeichert!")
+                if drive_ok:
+                    st.info(drive_msg)
+                else:
+                    st.warning(drive_msg)
 
 # ═══════════════════════════════════════════
 # TAB 4: AI Cover Letter

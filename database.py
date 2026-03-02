@@ -6,7 +6,8 @@ from pathlib import Path
 # Google Drive sync (optional — works without it too)
 from drive_storage import (
     is_drive_available, upload_json, download_json,
-    upload_file, download_file
+    upload_file, download_file, verify_file_on_drive,
+    test_drive_connection
 )
 
 DB_PATH = Path("data/jobs.json")
@@ -162,8 +163,11 @@ def save_settings(settings: dict):
     save_db(db)
 
 
-def save_document(name: str, content: bytes, doc_type: str):
-    """Save document locally and to Google Drive."""
+def save_document(name: str, content: bytes, doc_type: str) -> tuple[bool, str]:
+    """Save document locally and to Google Drive.
+
+    Returns (success, message) for UI feedback.
+    """
     db = load_db()
     filepath = DOCS_PATH / name
     with open(filepath, "wb") as f:
@@ -176,12 +180,37 @@ def save_document(name: str, content: bytes, doc_type: str):
     save_db(db)
 
     # Also upload the actual file to Drive
+    drive_ok = False
+    drive_msg = "Drive nicht verfügbar"
     if is_drive_available():
         try:
-            mime = "application/pdf" if name.endswith(".pdf") else "application/octet-stream"
-            upload_file(f"docs/{name}", content, mime_type=mime)
+            # Use proper mime types
+            mime_types = {
+                ".pdf": "application/pdf",
+                ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".doc": "application/msword",
+            }
+            ext = name[name.rfind('.'):].lower() if '.' in name else ""
+            mime = mime_types.get(ext, "application/octet-stream")
+
+            drive_ok = upload_file(f"docs/{name}", content, mime_type=mime)
+            if drive_ok:
+                # Verify the file is actually on Drive
+                from drive_storage import verify_file_on_drive
+                if verify_file_on_drive(f"docs/{name}"):
+                    drive_msg = f"✅ '{name}' auf Google Drive gesichert"
+                    print(f"[DB] Document uploaded and verified on Drive: {name}")
+                else:
+                    drive_msg = f"⚠️ '{name}' Upload schien OK, aber Datei nicht auf Drive gefunden"
+                    print(f"[DB] WARNING: Upload returned True but file not found on Drive: {name}")
+            else:
+                drive_msg = f"❌ '{name}' konnte nicht auf Drive hochgeladen werden"
+                print(f"[DB] Document upload failed: {name}")
         except Exception as e:
+            drive_msg = f"❌ Drive Fehler: {e}"
             print(f"[DB] Document upload to Drive error: {e}")
+
+    return drive_ok, drive_msg
 
 
 def get_document(doc_type: str) -> dict | None:
