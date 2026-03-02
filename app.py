@@ -204,26 +204,14 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### 🔍 Standard-Suche")
-    
-    default_keywords = st.text_area(
-        "Suchbegriffe (einer pro Zeile)",
-        value="\n".join(settings.get("default_keywords", [
-            "ERP Projektleiter",
-            "Business Analyst ERP",
-            "ERP Consultant",
-            "Abacus Consultant",
-            "IT Consultant Digitalisierung"
-        ])),
-        height=120
-    )
-    
+    st.caption("Die Jobprofile kannst du direkt im Tab 'Stellensuche' per Multiselect auswählen.")
+
     default_days = st.slider(
         "Inserate der letzten X Tage",
         min_value=3, max_value=60, value=settings.get("default_days", 14)
     )
-    
+
     if st.button("💾 Einstellungen speichern", use_container_width=True):
-        settings["default_keywords"] = [k.strip() for k in default_keywords.split("\n") if k.strip()]
         settings["default_days"] = default_days
         save_settings(settings)
         st.success("Gespeichert!")
@@ -246,39 +234,173 @@ with tab1:
     st.markdown("""
     <div class="search-header">
         <h2 style="margin:0; color:#e2e8f0;">🔍 Stellensuche Schweiz</h2>
-        <p style="margin:6px 0 0 0; color:#94a3b8;">Automatische Suche auf jobs.ch nach aktuellen Stellen</p>
+        <p style="margin:6px 0 0 0; color:#94a3b8;">Wähle Jobprofile aus und durchsuche jobs.ch nach aktuellen Stellen</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([3, 1, 1])
-    
-    with col1:
-        search_input = st.text_input(
-            "🔎 Suchbegriffe",
-            value="ERP Projektleiter Business Analyst Consultant",
-            help="Mehrere Begriffe mit Leerzeichen trennen"
+
+    # ── Predefined job search categories ──
+    JOB_CATEGORIES = {
+        "ERP & Business Software": [
+            "ERP Projektleiter",
+            "ERP Consultant",
+            "ERP Berater",
+            "SAP Consultant",
+            "SAP FI/CO Berater",
+            "Dynamics 365 Consultant",
+            "Dynamics AX Berater",
+            "Abacus Consultant",
+            "Abacus Berater",
+            "Navision Consultant",
+            "Infor Consultant",
+            "Oracle ERP Consultant",
+        ],
+        "Business Analyse & Consulting": [
+            "Business Analyst",
+            "Business Analyst IT",
+            "Requirements Engineer",
+            "IT Consultant",
+            "IT Berater",
+            "Management Consultant",
+            "Unternehmensberater",
+            "Digitalisierung Berater",
+            "Prozessberater",
+            "Business Consultant",
+        ],
+        "Projektmanagement": [
+            "IT Projektleiter",
+            "Projektmanager IT",
+            "Projekt Manager Digitalisierung",
+            "Programm Manager",
+            "Scrum Master",
+            "Agile Coach",
+            "Product Owner",
+            "PMO",
+        ],
+        "Finance & Controlling IT": [
+            "Finance Consultant",
+            "Controlling Consultant",
+            "FI CO Consultant",
+            "Financial Analyst IT",
+            "Controller Digitalisierung",
+            "Treasury Consultant",
+        ],
+        "IT Management & Strategie": [
+            "IT Manager",
+            "IT Leiter",
+            "CIO",
+            "Head of IT",
+            "IT Strategie Berater",
+            "Digital Transformation Manager",
+            "Change Manager IT",
+        ],
+        "Data & Analytics": [
+            "Data Analyst",
+            "BI Consultant",
+            "Business Intelligence Berater",
+            "Power BI Consultant",
+            "Data Engineer",
+            "Reporting Analyst",
+        ],
+    }
+
+    # Build flat list of all options for multiselect
+    all_job_options = []
+    for category, jobs_list in JOB_CATEGORIES.items():
+        for job in jobs_list:
+            all_job_options.append(job)
+
+    # Default selections matching user profile
+    default_selections = [
+        "ERP Projektleiter",
+        "ERP Consultant",
+        "Business Analyst IT",
+        "IT Consultant",
+        "SAP Consultant",
+        "Abacus Consultant",
+        "IT Projektleiter",
+    ]
+
+    # Category expander to browse available options
+    with st.expander("📂 Jobprofile nach Kategorie durchsuchen", expanded=False):
+        st.markdown("*Klicke auf eine Kategorie um alle verfügbaren Suchbegriffe zu sehen:*")
+        for cat_name, cat_jobs in JOB_CATEGORIES.items():
+            st.markdown(f"**{cat_name}:** {', '.join(cat_jobs)}")
+
+    # Multiselect for job profiles
+    selected_profiles = st.multiselect(
+        "🎯 Jobprofile auswählen",
+        options=all_job_options,
+        default=[s for s in default_selections if s in all_job_options],
+        help="Wähle ein oder mehrere Jobprofile aus. Jedes Profil wird einzeln auf jobs.ch gesucht.",
+        key="search_profiles_select"
+    )
+
+    # Optional: custom search term
+    col_custom, col_days, col_btn = st.columns([3, 1, 1])
+
+    with col_custom:
+        custom_search = st.text_input(
+            "➕ Eigener Suchbegriff (optional)",
+            placeholder="z.B. 'Implementierung Berater' oder 'Dynamics Finance'",
+            key="custom_search_input"
         )
-    
-    with col2:
+
+    with col_days:
         days_filter = st.number_input(
             "Tage zurück",
-            min_value=1, max_value=60, value=14
+            min_value=1, max_value=60, value=14,
+            key="days_filter_input"
         )
-    
-    with col3:
+
+    with col_btn:
         st.markdown("<br>", unsafe_allow_html=True)
         run_search = st.button("🚀 Suche starten", use_container_width=True, type="primary")
-    
+
+    # Info about selection
+    if selected_profiles or custom_search:
+        all_terms = list(selected_profiles)
+        if custom_search.strip():
+            all_terms.append(custom_search.strip())
+        st.caption(f"🔎 {len(all_terms)} Suchbegriff(e) ausgewählt — jeder wird einzeln gesucht")
+
     if run_search:
-        keywords = search_input.split()
-        with st.spinner(f"Suche läuft... (jobs.ch)"):
-            results = search_multiple_platforms(keywords, days_back=days_filter)
-            st.session_state.search_results = results
-        
-        if results:
-            st.success(f"✅ {len(results)} Stellen gefunden!")
+        # Build search terms from selected profiles + custom
+        search_terms = list(selected_profiles)
+        if custom_search.strip():
+            search_terms.append(custom_search.strip())
+
+        if not search_terms:
+            st.error("Bitte mindestens ein Jobprofil auswählen oder einen eigenen Suchbegriff eingeben.")
         else:
-            st.warning("Keine Stellen gefunden. Versuche andere Suchbegriffe.")
+            all_results = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            for idx, term in enumerate(search_terms):
+                status_text.text(f"🔍 Suche {idx+1}/{len(search_terms)}: «{term}»...")
+                progress_bar.progress((idx) / len(search_terms))
+
+                results = search_multiple_platforms(term.split(), days_back=days_filter)
+                all_results.extend(results)
+
+            progress_bar.progress(1.0)
+            status_text.empty()
+            progress_bar.empty()
+
+            # Deduplicate by URL
+            seen_urls = set()
+            unique_results = []
+            for job in all_results:
+                if job["url"] not in seen_urls:
+                    seen_urls.add(job["url"])
+                    unique_results.append(job)
+
+            st.session_state.search_results = unique_results
+
+            if unique_results:
+                st.success(f"✅ {len(unique_results)} Stellen gefunden! ({len(all_results) - len(unique_results)} Duplikate entfernt)")
+            else:
+                st.warning("Keine Stellen gefunden. Versuche andere Jobprofile.")
     
     # Manual job entry
     with st.expander("➕ Stelle manuell hinzufügen"):
