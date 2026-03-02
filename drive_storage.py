@@ -146,7 +146,9 @@ def test_drive_connection() -> tuple[bool, str]:
             q=f"'{folder_id}' in parents and trashed=false",
             spaces="drive",
             fields="files(id, name, size)",
-            pageSize=10
+            pageSize=10,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         ).execute()
         files = results.get("files", [])
         file_names = [f.get("name", "?") for f in files[:5]]
@@ -177,7 +179,8 @@ def _find_or_create_subfolder(service, parent_id: str, folder_name: str) -> str 
         query = (f"name='{folder_name}' and '{parent_id}' in parents "
                  f"and mimeType='application/vnd.google-apps.folder' and trashed=false")
         results = service.files().list(
-            q=query, spaces="drive", fields="files(id)"
+            q=query, spaces="drive", fields="files(id)",
+            supportsAllDrives=True, includeItemsFromAllDrives=True,
         ).execute()
         files = results.get("files", [])
         if files:
@@ -188,7 +191,9 @@ def _find_or_create_subfolder(service, parent_id: str, folder_name: str) -> str 
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [parent_id],
         }
-        folder = service.files().create(body=metadata, fields="id").execute()
+        folder = service.files().create(
+            body=metadata, fields="id", supportsAllDrives=True
+        ).execute()
         print(f"[Drive] Created subfolder '{folder_name}' → {folder.get('id')}")
         return folder.get("id")
     except Exception as e:
@@ -219,7 +224,8 @@ def _find_file(service, folder_id: str, filename: str):
         parent_id, bare_name = _resolve_path(service, folder_id, filename)
         query = f"name='{bare_name}' and '{parent_id}' in parents and trashed=false"
         results = service.files().list(
-            q=query, spaces="drive", fields="files(id, name)"
+            q=query, spaces="drive", fields="files(id, name)",
+            supportsAllDrives=True, includeItemsFromAllDrives=True,
         ).execute()
         files = results.get("files", [])
         return files[0]["id"] if files else None
@@ -247,13 +253,15 @@ def upload_file(filename: str, content: bytes, mime_type: str = "application/oct
         if existing_id:
             # Update existing file
             service.files().update(
-                fileId=existing_id, media_body=media
+                fileId=existing_id, media_body=media,
+                supportsAllDrives=True,
             ).execute()
         else:
             # Create new file in resolved parent folder
             metadata = {"name": bare_name, "parents": [parent_id]}
             service.files().create(
-                body=metadata, media_body=media, fields="id"
+                body=metadata, media_body=media, fields="id",
+                supportsAllDrives=True,
             ).execute()
 
         return True, ""
@@ -261,7 +269,7 @@ def upload_file(filename: str, content: bytes, mime_type: str = "application/oct
         error_msg = str(e)
         print(f"[Drive] Upload error for {filename}: {error_msg}")
         # ALWAYS include raw error for debugging
-        raw_hint = f" (API: {error_msg[:150]})"
+        raw_hint = f" (API: {error_msg[:300]})"
         # Parse common errors but show raw text too
         if "insufficientPermissions" in error_msg or "forbidden" in error_msg.lower():
             return False, f"Service Account hat keine Schreibrechte auf den Ordner.{raw_hint}"
@@ -284,7 +292,7 @@ def download_file(filename: str) -> bytes | None:
         if not file_id:
             return None
 
-        request = service.files().get_media(fileId=file_id)
+        request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
         buffer = io.BytesIO()
         downloader = MediaIoBaseDownload(buffer, request)
 
@@ -330,7 +338,9 @@ def list_files() -> list:
         results = service.files().list(
             q=query, spaces="drive",
             fields="files(id, name, mimeType, size, modifiedTime)",
-            orderBy="modifiedTime desc"
+            orderBy="modifiedTime desc",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         ).execute()
         return results.get("files", [])
     except Exception as e:
