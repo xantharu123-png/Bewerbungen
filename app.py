@@ -570,23 +570,20 @@ with tab1:
             already_saved = job["url"] in existing_urls
 
             with st.container():
-                col_score, col_main, col_btn = st.columns([0.6, 4.4, 1])
-
-                with col_score:
-                    if cv_text_for_score:
-                        s_color = "#16a34a" if quick_score >= 60 else "#f59e0b" if quick_score >= 30 else "#9ca3af"
-                        st.markdown(
-                            f'<div style="text-align:center;padding-top:12px;">'
-                            f'<div style="font-size:1.4rem;font-weight:700;color:{s_color};">{quick_score}%</div>'
-                            f'<div style="font-size:0.65rem;color:#a0917d;">Match</div></div>',
-                            unsafe_allow_html=True
-                        )
+                col_main, col_btn = st.columns([5, 1])
 
                 with col_main:
                     saved_badge = ' <span style="background:#16a34a;color:white;padding:2px 8px;border-radius:10px;font-size:0.7rem;">✓ Gespeichert</span>' if already_saved else ""
+                    # Score badge — small pill next to title
+                    if cv_text_for_score and quick_score > 0:
+                        s_bg = "#dcfce7" if quick_score >= 65 else "#fef9c3" if quick_score >= 40 else "#f3f4f6"
+                        s_color = "#16a34a" if quick_score >= 65 else "#b45309" if quick_score >= 40 else "#6b7280"
+                        score_badge = f' <span style="background:{s_bg};color:{s_color};padding:2px 7px;border-radius:8px;font-size:0.7rem;font-weight:600;">{quick_score}%</span>'
+                    else:
+                        score_badge = ""
                     st.markdown(f"""
                     <div class="job-card">
-                        <div class="job-title">{job['title']}{saved_badge}</div>
+                        <div class="job-title">{job['title']}{score_badge}{saved_badge}</div>
                         <div class="job-meta">
                             <span class="job-company">{job.get('company', '–')}</span>
                             {"&nbsp;&nbsp;📍 " + job['location'] if job.get('location') else ""}

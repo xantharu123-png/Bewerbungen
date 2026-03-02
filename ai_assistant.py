@@ -298,7 +298,15 @@ def generate_cover_letter_pdf(letter_text: str, filename: str = "Anschreiben.pdf
 
 
 def calculate_quick_score(job_title: str, job_company: str, job_location: str, cv_text: str) -> int:
-    """Fast local keyword-based match score (0-100) without API calls."""
+    """Fast local keyword-based match score (0-100) without API calls.
+
+    Scoring dimensions (max 100):
+      - Role fit        (0-35): Does the job role match CV experience?
+      - ERP/Tech fit    (0-25): Do specific systems/technologies match?
+      - Seniority fit   (0-15): Is the level appropriate?
+      - Domain fit      (0-15): Does the business domain match?
+      - Location fit    (0-10): Is it in Deutschschweiz?
+    """
     import re
 
     if not cv_text or not job_title:
@@ -306,86 +314,106 @@ def calculate_quick_score(job_title: str, job_company: str, job_location: str, c
 
     cv_lower = cv_text.lower()
     title_lower = job_title.lower()
-
-    # ── Relevant keywords for ERP/IT/Business roles ──
-    role_keywords = {
-        # Core roles (high weight)
-        "erp": 12, "sap": 10, "projektleiter": 12, "project manager": 10,
-        "business analyst": 12, "it consultant": 10, "consultant": 6,
-        "berater": 6, "it-projektleiter": 12, "it projektleiter": 12,
-        "projektmanager": 10, "projektmanagement": 8, "project management": 8,
-        # Technical skills
-        "business intelligence": 8, "bi": 4, "data warehouse": 6,
-        "sql": 5, "python": 5, "jira": 4, "confluence": 4,
-        "agile": 5, "scrum": 5, "itil": 4, "prince2": 4,
-        "requirements engineering": 6, "anforderungsanalyse": 6,
-        "prozessoptimierung": 6, "digitalisierung": 5,
-        "it-architektur": 6, "systemintegration": 6,
-        # ERP systems
-        "abacus": 8, "microsoft dynamics": 8, "dynamics 365": 8,
-        "navision": 7, "business central": 7, "oracle": 6,
-        "salesforce": 5, "netsuite": 5,
-        # Domain knowledge
-        "supply chain": 5, "logistik": 4, "finanzen": 4,
-        "rechnungswesen": 4, "controlling": 4, "hr": 3,
-        "fertigung": 4, "produktion": 4, "einkauf": 4,
-        # Soft skills / context
-        "führung": 4, "teamleitung": 5, "stakeholder": 4,
-        "migration": 5, "rollout": 5, "implementierung": 5,
-        "einführung": 5, "transformation": 5,
-    }
-
     score = 0
-    max_possible = 0
 
-    # Check which keywords from the job title appear in the CV
-    title_words = set(re.findall(r'[a-zäöüß]+(?:[- ][a-zäöüß]+)*', title_lower))
+    # ═══ 1. ROLE FIT (max 35) ═══
+    role_score = 0
+    # Primary roles - only count the BEST match, not all
+    primary_roles = [
+        (["projektleiter", "project manager", "it-projektleiter", "projektmanager"], 35),
+        (["business analyst", "anforderungsanalyst"], 30),
+        (["consultant", "berater", "it consultant", "it-berater"], 25),
+        (["entwickler", "developer", "engineer", "architekt"], 15),
+        (["support", "helpdesk", "service desk"], 8),
+        (["sachbearbeiter", "administration", "assistenz"], 5),
+        (["verkauf", "sales", "account manager"], 5),
+    ]
+    for role_variants, points in primary_roles:
+        if any(r in title_lower for r in role_variants):
+            # Check if this role appears in CV
+            if any(r in cv_lower for r in role_variants):
+                role_score = max(role_score, points)
+            else:
+                role_score = max(role_score, int(points * 0.2))
+            break  # Only match first (best) role category
 
-    for keyword, weight in role_keywords.items():
-        kw_lower = keyword.lower()
-        in_title = kw_lower in title_lower
-        in_cv = kw_lower in cv_lower
+    score += min(role_score, 35)
 
-        if in_title:
-            max_possible += weight
-            if in_cv:
-                score += weight  # Full match: keyword in both title and CV
+    # ═══ 2. ERP / TECHNOLOGY FIT (max 25) ═══
+    tech_score = 0
+    tech_matches = {
+        # ERP systems (high value if specific match)
+        "abacus": 15, "sap": 12, "microsoft dynamics": 12,
+        "dynamics 365": 12, "business central": 12, "navision": 10,
+        "oracle": 8, "salesforce": 8, "netsuite": 8, "proalpha": 8,
+        # General tech
+        "erp": 6, "crm": 5, "bi": 4, "sql": 3, "python": 3,
+    }
+    matched_tech = 0
+    unmatched_tech = 0
+    for tech, weight in tech_matches.items():
+        if tech in title_lower:
+            if tech in cv_lower:
+                tech_score += weight
+                matched_tech += 1
+            else:
+                unmatched_tech += 1
+    # Penalty if job requires tech NOT in CV
+    if unmatched_tech > 0 and matched_tech == 0:
+        tech_score = max(0, tech_score - 5)
+    score += min(tech_score, 25)
 
-        elif in_cv:
-            # Keyword in CV but not in title — small bonus for general relevance
-            score += weight * 0.1
+    # ═══ 3. SENIORITY FIT (max 15) ═══
+    seniority_score = 10  # neutral default
+    # Negative signals — junior roles
+    if any(w in title_lower for w in ["junior", "trainee", "praktikant", "lehrling", "werkstudent", "stagiaire"]):
+        seniority_score = 2
+    # Positive — senior/lead aligns with Projektleiter experience
+    elif any(w in title_lower for w in ["senior", "lead", "leiter", "head of", "director"]):
+        if any(w in cv_lower for w in ["leiter", "projektleiter", "lead", "senior", "führung"]):
+            seniority_score = 15
+        else:
+            seniority_score = 6
+    score += seniority_score
 
-    # ── Title word matching ──
-    # Check if individual title words appear in CV
-    title_bonus = 0
-    meaningful_words = [w for w in title_words if len(w) > 3 and w not in {"und", "oder", "für", "mit", "bei", "der", "die", "das", "ein", "eine"}]
-    for word in meaningful_words:
-        if word in cv_lower:
-            title_bonus += 3
+    # ═══ 4. DOMAIN FIT (max 15) ═══
+    domain_score = 0
+    domains = {
+        "finanzen": 4, "finance": 4, "rechnungswesen": 4, "controlling": 4,
+        "logistik": 4, "supply chain": 4, "einkauf": 3, "produktion": 3,
+        "personal": 3, "hr": 2, "fertigung": 3, "lager": 2,
+        "digitalisierung": 5, "transformation": 4, "migration": 4,
+        "implementierung": 4, "rollout": 4, "einführung": 4,
+    }
+    for domain, weight in domains.items():
+        if domain in title_lower and domain in cv_lower:
+            domain_score += weight
+    score += min(domain_score, 15)
 
-    score += title_bonus
-
-    # ── Location bonus (Deutschschweiz) ──
-    swiss_cities = ["zürich", "bern", "basel", "luzern", "winterthur", "st. gallen",
-                    "st.gallen", "aarau", "zug", "schaffhausen", "frauenfeld", "baden",
-                    "olten", "solothurn", "thun", "biel", "rapperswil", "wil", "chur"]
+    # ═══ 5. LOCATION FIT (max 10) ═══
+    deutschschweiz = [
+        "zürich", "bern", "basel", "luzern", "winterthur", "st. gallen",
+        "st.gallen", "aarau", "zug", "schaffhausen", "frauenfeld", "baden",
+        "olten", "solothurn", "thun", "biel", "rapperswil", "wil", "chur",
+        "gerlikon", "weinfelden", "kreuzlingen",
+    ]
+    romandie = ["genève", "lausanne", "fribourg", "neuchâtel", "sion", "nyon", "morges"]
     if job_location:
         loc_lower = job_location.lower()
-        for city in swiss_cities:
-            if city in loc_lower:
-                score += 5
-                break
+        if any(c in loc_lower for c in deutschschweiz):
+            score += 10
+        elif any(c in loc_lower for c in romandie):
+            score += 3  # French-speaking = less ideal
+        elif "schweiz" in loc_lower or "remote" in loc_lower:
+            score += 7
 
-    # Normalize to 0-100
-    if max_possible > 0:
-        # Weighted: 70% keyword match, 30% general relevance
-        keyword_ratio = min(score / max_possible, 1.0) if max_possible > 0 else 0
-        normalized = int(keyword_ratio * 100)
-    else:
-        # No role keywords found in title — use raw score capped
-        normalized = min(int(score * 2), 60)
+    # ═══ 6. LANGUAGE PENALTY ═══
+    # French/Italian job titles are less relevant
+    french_signals = ["responsable", "ingénieur", "chargé", "gestionnaire", "conseiller"]
+    if any(f in title_lower for f in french_signals):
+        score = int(score * 0.5)
 
-    return max(0, min(100, normalized))
+    return max(0, min(100, int(score)))
 
 
 def calculate_match_score(
