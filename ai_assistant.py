@@ -274,26 +274,32 @@ def generate_cover_letter_pdf(
         )
 
     # ── Locate the DOCX template ──
+    # First: try to restore from database (base64-embedded)
+    try:
+        from database import get_document, DOCS_PATH
+        doc_info = get_document("cover_letter")
+        if doc_info:
+            db_path = _Path(doc_info.get("path", ""))
+            if db_path.exists() and db_path.stat().st_size > 0:
+                print(f"[PDF] Template from DB: {db_path}")
+    except Exception as e:
+        print(f"[PDF] DB template lookup failed: {e}")
+
     template_candidates = [
         _Path("data/documents/Bewerbungsschreiben_Mikulic.docx"),
-        *_Path(".").glob("**/Bewerbungsschreiben*.docx"),
-    ]
-    # Also check uploads
-    uploads = _Path("/tmp")  # Will search more broadly
-    for candidate in [
-        _Path("/sessions/hopeful-affectionate-cannon/mnt/uploads/Bewerbungsschreiben_Mikulic.docx"),
+        *list(_Path("data/documents").glob("Bewerbungsschreiben*.docx")),
+        *list(_Path("data/documents").glob("*.docx")),
         _Path("Bewerbungsschreiben_Mikulic.docx"),
-    ]:
-        template_candidates.append(candidate)
+    ]
 
     template_path = None
     for p in template_candidates:
-        if p.exists():
+        if p.exists() and p.stat().st_size > 0:
             template_path = p
             break
 
     if not template_path:
-        # No template found — use reportlab fallback
+        print("[PDF] No DOCX template found — using reportlab fallback")
         return _generate_cover_letter_pdf_fallback(
             letter_text, job_title, company, contact_person, company_address
         )
@@ -554,42 +560,115 @@ def _generate_cover_letter_pdf_fallback(
     contact_person: str = "",
     company_address: str = "",
 ) -> bytes:
-    """Simple reportlab fallback if DOCX template or LibreOffice is unavailable."""
+    """Reportlab fallback matching the DOCX template layout.
+
+    Layout: sender left, recipient right (via tab at 9.75cm), date right,
+    bullet points with hanging indent using • symbol.
+    """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.enums import TA_LEFT
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+    )
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
+    page_w, page_h = A4
+    left_m = 2.5 * cm
+    right_m = 2.5 * cm
+    usable_w = page_w - left_m - right_m
+
+    doc_pdf = SimpleDocTemplate(
         buffer, pagesize=A4,
-        topMargin=2.5*cm, bottomMargin=2.0*cm,
-        leftMargin=2.5*cm, rightMargin=2.5*cm,
+        topMargin=2.5 * cm, bottomMargin=2.0 * cm,
+        leftMargin=left_m, rightMargin=right_m,
     )
+
+    # Styles
     s = ParagraphStyle("N", fontName="Helvetica", fontSize=11, leading=14,
                        alignment=TA_LEFT, spaceAfter=6)
-    sb = ParagraphStyle("B", fontName="Helvetica-Bold", fontSize=11, leading=14,
-                        alignment=TA_LEFT, spaceAfter=6)
+    s_right = ParagraphStyle("R", fontName="Helvetica", fontSize=11, leading=14,
+                             alignment=TA_RIGHT, spaceAfter=6)
+    s_bold = ParagraphStyle("B", fontName="Helvetica-Bold", fontSize=11, leading=14,
+                            alignment=TA_LEFT, spaceAfter=6)
+    s_bullet = ParagraphStyle("BUL", fontName="Helvetica", fontSize=11, leading=14,
+                              alignment=TA_LEFT, spaceAfter=4,
+                              leftIndent=14, firstLineIndent=-14)
 
     clean_company = _sanitize_company(company)
-    story = [
-        Paragraph("Miroslav Mikulic", s),
-        Paragraph("Im Weberlis Rebberg 42", s),
-        Paragraph("8500 Gerlikon", s),
-        Paragraph("079 602 83 31", s),
-        Spacer(1, 12),
-        Paragraph(f"Gerlikon, {datetime.now().strftime('%d.%m.%Y')}", s),
-        Spacer(1, 24),
-        Paragraph(job_title or "Bewerbung", sb),
-        Spacer(1, 12),
+
+    # ── Header: Sender (left) | Recipient (right) ──
+    sender_lines = [
+        "Miroslav Mikulic",
+        "Im Weberlis Rebberg 42",
+        "8500 Gerlikon",
+        "079 602 83 31",
     ]
+    recipient_lines = []
+    if clean_company:
+        recipient_lines.append(clean_company)
+    if contact_person:
+        recipient_lines.append(contact_person)
+    if company_address:
+        for part in company_address.strip().split("\n"):
+            if part.strip():
+                recipient_lines.append(part.strip())
+
+    # Pad to same length
+    max_lines = max(len(sender_lines), len(recipient_lines))
+    while len(sender_lines) < max_lines:
+        sender_lines.append("")
+    while len(recipient_lines) < max_lines:
+        recipient_lines.append("")
+
+    left_col_w = usable_w * 0.55
+    right_col_w = usable_w * 0.45
+
+    header_data = []
+    for sl, rl in zip(sender_lines, recipient_lines):
+        header_data.append([
+            Paragraph(sl, s) if sl else Paragraph("", s),
+            Paragraph(rl, s_right) if rl else Paragraph("", s_right),
+        ])
+
+    header_table = Table(header_data, colWidths=[left_col_w, right_col_w])
+    header_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+
+    story = [header_table, Spacer(1, 18)]
+
+    # Date — right aligned
+    date_str = f"Gerlikon, {datetime.now().strftime('%d.%m.%Y')}"
+    story.append(Paragraph(date_str, s_right))
+    story.append(Spacer(1, 24))
+
+    # Betreff — bold
+    story.append(Paragraph(job_title or "Bewerbung", s_bold))
+    story.append(Spacer(1, 12))
+
+    # Body text
     for line in letter_text.strip().split("\n"):
-        if line.strip():
-            story.append(Paragraph(line.strip(), s))
+        stripped = line.strip()
+        if not stripped:
+            story.append(Spacer(1, 8))
+        elif stripped.startswith("- ") or stripped.startswith("• ") or stripped.startswith("– "):
+            bullet_text = stripped.lstrip("-•– ").strip()
+            story.append(Paragraph(f"•  {bullet_text}", s_bullet))
+        elif stripped.startswith("Freundliche Gr") or stripped.startswith("Mit freundlichen"):
+            story.append(Spacer(1, 4))
+            story.append(Paragraph(stripped, s))
+        elif stripped == "Miroslav Mikulic":
+            story.append(Paragraph(stripped, s))
         else:
-            story.append(Spacer(1, 12))
-    doc.build(story)
+            story.append(Paragraph(stripped, s))
+
+    doc_pdf.build(story)
     return buffer.getvalue()
 
 
