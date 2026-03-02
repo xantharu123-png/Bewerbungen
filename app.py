@@ -326,6 +326,17 @@ with st.sidebar:
     settings = get_settings()
     
     st.markdown("---")
+    st.markdown("### 📧 Gmail E-Mail-Versand")
+    gmail_app_pw = st.text_input(
+        "Gmail App-Passwort",
+        value=settings.get("gmail_app_password", ""),
+        type="password",
+        placeholder="xxxx xxxx xxxx xxxx",
+        help="Erstelle ein App-Passwort unter Google Account → Sicherheit → App-Passwörter"
+    )
+    st.caption("[App-Passwort erstellen →](https://myaccount.google.com/apppasswords)")
+
+    st.markdown("---")
     st.markdown("### 🔍 Standard-Suche")
     st.caption("Die Jobprofile kannst du direkt im Tab 'Stellensuche' per Multiselect auswählen.")
 
@@ -336,6 +347,7 @@ with st.sidebar:
 
     if st.button("💾 Einstellungen speichern", use_container_width=True):
         settings["default_days"] = default_days
+        settings["gmail_app_password"] = gmail_app_pw
         save_settings(settings)
         st.success("Gespeichert!")
 
@@ -688,70 +700,84 @@ with tab1:
                             pdf_bytes = None
                             st.warning(f"PDF-Erstellung fehlgeschlagen: {e}")
 
-                        import urllib.parse
-                        subject = f"Bewerbung: {job.get('title', '')}" + (f" — {job.get('company', '')}" if job.get('company') else "")
-                        # Use contact email if available, otherwise empty
+                        # ── Email recipient ──
                         to_email = st.session_state.get(f"contact_email_{i}", "")
-                        subject_encoded = urllib.parse.quote(subject)
+                        subject = f"Bewerbung: {job.get('title', '')}" + (f" — {job.get('company', '')}" if job.get('company') else "")
                         body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{job.get('title', '')}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n- Arbeitszeugnisse\n\nFreundliche Grüsse\nMiroslav Mikulic"
-                        body_encoded = urllib.parse.quote(body_text)
-                        gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1"
-                        if to_email:
-                            gmail_url += f"&to={urllib.parse.quote(to_email)}"
-                        gmail_url += f"&su={subject_encoded}&body={body_encoded}"
 
-                        # Download buttons for all documents
-                        dl_cols = st.columns(5)
-                        with dl_cols[0]:
+                        # ── Recipient email input ──
+                        send_to = st.text_input(
+                            "Empfänger E-Mail",
+                            value=to_email,
+                            placeholder="hr@firma.ch",
+                            key=f"email_to_{i}"
+                        )
+
+                        # ── Action buttons ──
+                        btn_cols = st.columns([2, 2, 1])
+                        with btn_cols[0]:
+                            send_clicked = st.button("📧 Bewerbung senden", key=f"send_{i}", use_container_width=True, type="primary")
+                        with btn_cols[1]:
                             if pdf_bytes:
                                 st.download_button(
-                                    "📄 Anschreiben",
+                                    "📄 Anschreiben PDF",
                                     data=pdf_bytes,
                                     file_name=pdf_filename,
                                     mime="application/pdf",
                                     use_container_width=True,
                                     key=f"dl_pdf_{i}"
                                 )
-                        with dl_cols[1]:
-                            cv_doc = get_document("cv")
-                            if cv_doc:
-                                cv_path = Path(cv_doc.get("path", ""))
-                                if cv_path.exists():
-                                    with open(cv_path, "rb") as f:
-                                        cv_bytes = f.read()
-                                    st.download_button("📋 CV", data=cv_bytes, file_name=cv_doc.get("filename", "Lebenslauf.pdf"), mime="application/pdf", use_container_width=True, key=f"dl_cv_{i}")
-                        with dl_cols[2]:
-                            diploma_doc = get_document("diplome")
-                            if diploma_doc:
-                                diploma_path = Path(diploma_doc.get("path", ""))
-                                if diploma_path.exists():
-                                    with open(diploma_path, "rb") as f:
-                                        diploma_bytes = f.read()
-                                    st.download_button("🎓 Diplome", data=diploma_bytes, file_name=diploma_doc.get("filename", "Diplome.pdf"), mime="application/pdf", use_container_width=True, key=f"dl_diploma_{i}")
-                        with dl_cols[3]:
-                            zeugnis_doc = get_document("zeugnisse")
-                            if zeugnis_doc:
-                                zeugnis_path = Path(zeugnis_doc.get("path", ""))
-                                if zeugnis_path.exists():
-                                    with open(zeugnis_path, "rb") as f:
-                                        zeugnis_bytes = f.read()
-                                    st.download_button("📝 Zeugnisse", data=zeugnis_bytes, file_name=zeugnis_doc.get("filename", "Arbeitszeugnisse.pdf"), mime="application/pdf", use_container_width=True, key=f"dl_zeugnis_{i}")
-                        with dl_cols[4]:
+                        with btn_cols[2]:
                             if st.button("🗑️ Schliessen", key=f"close_{i}", use_container_width=True):
                                 del st.session_state[f"letter_{i}"]
                                 st.rerun()
 
-                        # Gmail link with instructions
-                        st.markdown(
-                            f'<a href="{gmail_url}" target="_blank" style="'
-                            f'display:inline-block;width:100%;text-align:center;padding:12px 16px;margin-top:8px;'
-                            f'background:linear-gradient(135deg,#ea4335,#d93025);color:white;'
-                            f'border-radius:10px;text-decoration:none;font-weight:600;font-size:0.95rem;'
-                            f'box-sizing:border-box;">'
-                            f'📧 Gmail öffnen & PDFs anhängen</a>',
-                            unsafe_allow_html=True
-                        )
-                        st.caption("💡 Lade zuerst die PDFs oben herunter, dann öffne Gmail und hänge sie an.")
+                        # ── Send email with all attachments ──
+                        if send_clicked:
+                            if not send_to:
+                                st.error("Bitte eine Empfänger-E-Mail eingeben.")
+                            else:
+                                settings = get_settings()
+                                app_password = settings.get("gmail_app_password", "")
+                                if not app_password:
+                                    st.error("⚠️ Gmail App-Passwort fehlt! Bitte unter Einstellungen (Sidebar) das Gmail App-Passwort eintragen.")
+                                else:
+                                    with st.spinner("📧 Sende E-Mail mit allen Anhängen..."):
+                                        try:
+                                            attachments = []
+                                            # 1. Cover letter PDF
+                                            if pdf_bytes:
+                                                attachments.append((pdf_filename, pdf_bytes))
+                                            # 2. CV
+                                            cv_d = get_document("cv")
+                                            if cv_d and Path(cv_d["path"]).exists():
+                                                with open(cv_d["path"], "rb") as f:
+                                                    attachments.append((cv_d["filename"], f.read()))
+                                            # 3. Diplome
+                                            dip_d = get_document("diplome")
+                                            if dip_d and Path(dip_d["path"]).exists():
+                                                with open(dip_d["path"], "rb") as f:
+                                                    attachments.append((dip_d["filename"], f.read()))
+                                            # 4. Zeugnisse
+                                            zeu_d = get_document("zeugnisse")
+                                            if zeu_d and Path(zeu_d["path"]).exists():
+                                                with open(zeu_d["path"], "rb") as f:
+                                                    attachments.append((zeu_d["filename"], f.read()))
+
+                                            from email_sender import send_email_with_attachments
+                                            success, msg = send_email_with_attachments(
+                                                to_email=send_to,
+                                                subject=subject,
+                                                body=body_text,
+                                                attachments=attachments,
+                                                gmail_app_password=app_password,
+                                            )
+                                            if success:
+                                                st.success(f"✅ Bewerbung mit {len(attachments)} Anhängen an {send_to} gesendet!")
+                                            else:
+                                                st.error(f"Fehler beim Senden: {msg}")
+                                        except Exception as e:
+                                            st.error(f"Fehler: {e}")
         
         if st.button("📥 Alle speichern", type="primary"):
             count = 0
