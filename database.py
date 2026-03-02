@@ -29,11 +29,16 @@ def init_db():
                 save_db_local(cloud_data)
                 # Also restore documents
                 _restore_documents_from_drive(cloud_data)
-                print("[DB] Restored from Google Drive!")
+                print(f"[DB] Restored from Google Drive! Jobs: {len(cloud_data.get('jobs', []))}, "
+                      f"Docs: {len(cloud_data.get('documents', {}))}, "
+                      f"Settings: {list(cloud_data.get('settings', {}).keys())}")
                 return
+            else:
+                print("[DB] WARNING: Drive available but download returned nothing!")
 
     if not DB_PATH.exists():
-        save_db({"jobs": [], "settings": {}, "documents": {}})
+        # CRITICAL: Only save locally, NEVER overwrite Drive with empty data!
+        save_db_local({"jobs": [], "settings": {}, "documents": {}})
 
 
 def _restore_documents_from_drive(db_data: dict):
@@ -71,15 +76,23 @@ def load_db() -> dict:
 
 
 def save_db(data: dict):
-    """Save to local file and sync to Google Drive."""
+    """Save to local file and sync to Google Drive.
+    Safety: never overwrite Drive with empty data."""
     save_db_local(data)
 
-    # Sync to Drive in background
+    # Sync to Drive — but NEVER upload empty data
     if is_drive_available():
-        try:
-            upload_json(DRIVE_DB_NAME, data)
-        except Exception as e:
-            print(f"[DB] Drive sync error: {e}")
+        has_jobs = len(data.get("jobs", [])) > 0
+        has_docs = len(data.get("documents", {})) > 0
+        has_settings = len(data.get("settings", {})) > 0
+
+        if has_jobs or has_docs or has_settings:
+            try:
+                upload_json(DRIVE_DB_NAME, data)
+            except Exception as e:
+                print(f"[DB] Drive sync error: {e}")
+        else:
+            print("[DB] SKIPPED Drive sync — data is empty, refusing to overwrite")
 
 
 def get_jobs() -> list:
