@@ -659,7 +659,12 @@ with tab1:
 
                         # Generate PDF
                         try:
-                            pdf_bytes = generate_cover_letter_pdf(letter_text)
+                            pdf_bytes = generate_cover_letter_pdf(
+                                letter_text,
+                                job_title=job.get('title', ''),
+                                company=job.get('company', ''),
+                                contact_person=contact_person,
+                            )
                             company_clean = job.get('company', 'Firma').replace(' ', '_').replace('/', '-')
                             pdf_filename = f"Anschreiben_{company_clean}.pdf"
                         except Exception as e:
@@ -1248,7 +1253,12 @@ with tab4:
 
         # Generate PDF
         try:
-            pdf_bytes = generate_cover_letter_pdf(letter_text)
+            pdf_bytes = generate_cover_letter_pdf(
+                letter_text,
+                job_title=ai_title,
+                company=ai_company,
+                contact_person=ai_contact,
+            )
             company_clean = ai_company.replace(' ', '_').replace('/', '-') if ai_company else "Firma"
             pdf_filename = f"Anschreiben_{company_clean}.pdf"
         except Exception as e:
