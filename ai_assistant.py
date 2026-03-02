@@ -40,12 +40,37 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         return f"[Fehler beim PDF-Lesen: {e}]"
 
 def extract_text_from_docx(docx_bytes: bytes) -> str:
-    """Extract text from DOCX bytes."""
+    """Extract text from DOCX bytes, preserving bullet points and structure."""
     try:
         import docx
         doc = docx.Document(io.BytesIO(docx_bytes))
-        text = "\n".join([para.text for para in doc.paragraphs])
-        return text
+        lines = []
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if not text:
+                lines.append("")
+                continue
+            # Detect bullet/list paragraphs by style or numbering
+            is_bullet = False
+            style_name = (para.style.name or "").lower()
+            if "list" in style_name or "bullet" in style_name or "aufz" in style_name:
+                is_bullet = True
+            # Also check if paragraph has numbering format (Word list items)
+            if hasattr(para, '_element'):
+                numPr = para._element.find(
+                    './/{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numPr'
+                )
+                if numPr is not None:
+                    is_bullet = True
+            # Check for manual bullets
+            if text.startswith(('- ', '• ', '– ', '* ')):
+                is_bullet = True
+
+            if is_bullet and not text.startswith('- '):
+                lines.append(f"- {text}")
+            else:
+                lines.append(text)
+        return "\n".join(lines)
     except Exception as e:
         return f"[Fehler beim DOCX-Lesen: {e}]"
 
@@ -60,7 +85,10 @@ def generate_cover_letter(
     contact_person: str = "",
     company_address: str = "",
 ) -> str:
-    """Generate a tailored cover letter using Claude API."""
+    """Generate a tailored cover letter using Claude API.
+
+    Returns ONLY the body text: greeting → paragraphs with bullet list → closing → signature.
+    """
 
     client = _get_client()
 
@@ -89,6 +117,7 @@ def generate_cover_letter(
 - EXAKT den gleichen Schreibstil und Tonfall
 - EXAKT die gleiche Länge (ungefähr gleich viele Sätze pro Absatz)
 - Die gleiche Art, wie der Bewerber sich vorstellt und argumentiert
+- Falls die Vorlage eine Aufzählung mit "- " hat, behalte diese Aufzählung bei
 
 Ändere NUR die stellenspezifischen Inhalte:
 - Bezug zur neuen Stelle statt zur alten
@@ -111,12 +140,13 @@ Beschreibung: {job_description[:2000]}
 
 **AUSGABE-REGELN:**
 - Beginne mit: "{greeting}"
-- Ende mit: "Freundliche Grüsse" und "Miroslav Mikulic"
+- Ende mit: "Freundliche Grüsse" und dann "Miroslav Mikulic" auf einer neuen Zeile
 - KEIN Briefkopf, KEINE Adresse, KEIN Datum, KEIN Betreff — nur der Brieftext
+- Aufzählungspunkte mit "- " am Zeilenanfang kennzeichnen
 - Gib NUR den fertigen Brieftext zurück, keine Kommentare"""
 
     else:
-        # FREE MODE: Generate from scratch
+        # FREE MODE: Generate from scratch — Swiss style with bullet list
         prompt = f"""Schreibe ein professionelles Schweizer Bewerbungsschreiben {lang_instruction}.
 
 **Stellenanzeige:**
@@ -131,13 +161,16 @@ Beschreibung: {job_description[:2000]}
 
 {greeting}
 
-[Einleitung: 2-3 Sätze, konkreter Bezug zur Stelle und warum diese Stelle den Bewerber anspricht]
+[Einleitung: 2-3 Sätze, warum diese Stelle mich anspricht und wie ich darauf aufmerksam wurde]
 
-[Kernabsatz: 4-6 Sätze über relevante Erfahrungen, Kompetenzen und bisherige Projekte des Bewerbers, die zur Stelle passen. Konkrete Beispiele, keine Floskeln.]
+[Überleitung: 1-2 Sätze, dann "Was kann ich Ihrem Unternehmen bieten:" gefolgt von einer Aufzählung]
 
-[Mehrwert-Absatz: 3-4 Sätze darüber, welchen Mehrwert der Bewerber einbringt und was ihn motiviert]
+- [Stärke 1 mit konkretem Bezug zur Stelle]
+- [Stärke 2 mit konkretem Bezug zum Lebenslauf]
+- [Stärke 3 mit relevanter Erfahrung]
+- [Stärke 4 falls passend]
 
-[Schluss: 2-3 Sätze mit Gesprächswunsch]
+[Schluss: 2-3 Sätze mit Motivation und Gesprächswunsch]
 
 Freundliche Grüsse
 
@@ -146,10 +179,11 @@ Miroslav Mikulic
 **REGELN:**
 - Schreibe NUR die Absätze zwischen Anrede und Gruss — KEIN Briefkopf, KEINE Adresse, KEIN Datum, KEIN Betreff
 - Beginne direkt mit "{greeting}"
-- Ende mit "Freundliche Grüsse" und "Miroslav Mikulic"
-- Professioneller, persönlicher Ton — schweizerisch
+- Ende mit "Freundliche Grüsse" und dann "Miroslav Mikulic"
+- Die Aufzählung mit "- " am Zeilenanfang, 3-5 Punkte
+- Professioneller, selbstbewusster Ton — schweizerisch
 - Keine Floskeln, keine Superlative
-- 3-4 Absätze Haupttext"""
+- Aufzählungspunkte sollen konkret und auf die Stelle bezogen sein"""
 
     message = client.messages.create(
         model="claude-opus-4-6",
@@ -158,6 +192,45 @@ Miroslav Mikulic
     )
 
     return message.content[0].text
+
+
+def _sanitize_company(company: str) -> str:
+    """Clean company name: remove scraped garbage, keep only the actual company name."""
+    if not company:
+        return ""
+    # If company contains line breaks, take only the first line
+    company = company.split('\n')[0].strip()
+
+    # Always try to split on common scraper artifacts
+    scraper_artifacts = ['Speichern', 'Bewerben', 'Gestern', 'Heute', 'Einfach bewerben']
+    for artifact in scraper_artifacts:
+        if artifact in company:
+            company = company.split(artifact)[0].strip()
+
+    # Split on ® — company name is before it, rest is usually location/garbage
+    if '®' in company:
+        parts = company.split('®')
+        if len(parts[0]) > 2:
+            after = '®'.join(parts[1:]).strip()
+            # If after ® there's short text like " AG" keep it, otherwise drop
+            if after and (after.startswith(' AG') or after.startswith(' GmbH') or after.startswith(' SA') or len(after) < 5):
+                company = parts[0].strip() + '®' + after
+            else:
+                company = parts[0].strip()
+
+    # If still too long, it's scraped garbage
+    if len(company) > 60:
+        # Try common separators
+        for sep in [' - ', '|', '·', '  ']:
+            if sep in company:
+                company = company.split(sep)[0].strip()
+                break
+        if len(company) > 60:
+            company = company[:50].strip()
+
+    # Remove trailing punctuation artifacts
+    company = company.rstrip('|·-– ')
+    return company
 
 
 def generate_cover_letter_pdf(
@@ -169,31 +242,39 @@ def generate_cover_letter_pdf(
 ) -> bytes:
     """Generate a professionally formatted Swiss business letter PDF.
 
-    The letter_text should contain ONLY the body (greeting through signature).
-    The PDF adds the fixed sender block, recipient block, date, and Betreff automatically.
+    Layout matches a classic Swiss Bewerbungsschreiben:
+    - Sender top-left
+    - Recipient block right-aligned (tabbed)
+    - Date right-aligned
+    - Betreff bold
+    - Body with support for bullet points ("- " prefix)
+    - Greeting and signature
     """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm, cm
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY, TA_RIGHT
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.colors import HexColor
 
     buffer = io.BytesIO()
+    page_w, page_h = A4
 
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        topMargin=2*cm,
+        topMargin=2.5*cm,
         bottomMargin=2.5*cm,
         leftMargin=2.5*cm,
         rightMargin=2.5*cm,
     )
 
+    content_width = page_w - 5*cm  # total content width
+
     # ── Styles ──
     style_sender = ParagraphStyle(
         'Sender', fontName='Helvetica', fontSize=9, leading=13,
-        alignment=TA_LEFT, textColor=HexColor('#555555'),
+        alignment=TA_LEFT, textColor=HexColor('#444444'),
     )
     style_recipient = ParagraphStyle(
         'Recipient', fontName='Helvetica', fontSize=10.5, leading=15,
@@ -205,15 +286,21 @@ def generate_cover_letter_pdf(
     )
     style_betreff = ParagraphStyle(
         'Betreff', fontName='Helvetica-Bold', fontSize=11, leading=16,
-        alignment=TA_LEFT, textColor=HexColor('#222222'), spaceAfter=4,
+        alignment=TA_LEFT, textColor=HexColor('#222222'),
     )
     style_body = ParagraphStyle(
         'Body', fontName='Helvetica', fontSize=10.5, leading=15,
-        alignment=TA_JUSTIFY, textColor=HexColor('#222222'), spaceAfter=10,
+        alignment=TA_JUSTIFY, textColor=HexColor('#222222'), spaceAfter=8,
+    )
+    style_bullet = ParagraphStyle(
+        'Bullet', fontName='Helvetica', fontSize=10.5, leading=15,
+        alignment=TA_LEFT, textColor=HexColor('#222222'),
+        leftIndent=15, firstLineIndent=-15, spaceAfter=3,
+        bulletIndent=0,
     )
     style_greeting = ParagraphStyle(
         'Greeting', fontName='Helvetica', fontSize=10.5, leading=15,
-        alignment=TA_LEFT, textColor=HexColor('#222222'), spaceAfter=6,
+        alignment=TA_LEFT, textColor=HexColor('#222222'),
     )
     style_closing = ParagraphStyle(
         'Closing', fontName='Helvetica', fontSize=10.5, leading=15,
@@ -222,48 +309,65 @@ def generate_cover_letter_pdf(
 
     story = []
 
-    # ═══ 1. SENDER BLOCK ═══
-    sender_lines = [
-        "Miroslav Mikulic",
-        "Im Weberlis Rebberg 42",
-        "8500 Gerlikon",
-        "079 602 83 31",
-        "Miroslav.Mikulic@gmail.com",
-    ]
-    for line in sender_lines:
-        story.append(Paragraph(line, style_sender))
-    story.append(Spacer(1, 10*mm))
+    # ═══ 1. SENDER (left) + RECIPIENT (right) — side by side using Table ═══
+    sender_text = (
+        "Miroslav Mikulic<br/>"
+        "Im Weberlis Rebberg 42<br/>"
+        "8500 Gerlikon<br/>"
+        "079 602 83 31<br/>"
+        "miroslav.mikulic@gmail.com"
+    )
 
-    # ═══ 2. RECIPIENT BLOCK ═══
-    recipient_lines = []
-    if company:
-        recipient_lines.append(company)
+    # Clean the company name
+    clean_company = _sanitize_company(company)
+
+    recipient_parts = []
+    if clean_company:
+        recipient_parts.append(clean_company)
     if contact_person:
-        recipient_lines.append(f"z.Hd. {contact_person}")
+        recipient_parts.append(f"z.Hd. {contact_person}")
     if company_address:
-        for addr_line in company_address.split('\n'):
-            recipient_lines.append(addr_line.strip())
-    if not recipient_lines:
-        recipient_lines.append("An die Personalabteilung")
-    for line in recipient_lines:
-        story.append(Paragraph(line, style_recipient))
-    story.append(Spacer(1, 10*mm))
+        for addr_line in company_address.strip().split('\n'):
+            if addr_line.strip():
+                recipient_parts.append(addr_line.strip())
+    if not recipient_parts:
+        recipient_parts.append("")
 
-    # ═══ 3. DATE (right-aligned) ═══
+    recipient_text = "<br/>".join(recipient_parts)
+
+    sender_para = Paragraph(sender_text, style_sender)
+    recipient_para = Paragraph(recipient_text, style_recipient)
+
+    # Two-column table: sender left, recipient right
+    addr_table = Table(
+        [[sender_para, recipient_para]],
+        colWidths=[content_width * 0.48, content_width * 0.52],
+    )
+    addr_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    story.append(addr_table)
+    story.append(Spacer(1, 15*mm))
+
+    # ═══ 2. DATE (right-aligned) ═══
     date_str = f"Gerlikon, {datetime.now().strftime('%d.%m.%Y')}"
     story.append(Paragraph(date_str, style_date))
     story.append(Spacer(1, 10*mm))
 
-    # ═══ 4. BETREFF ═══
+    # ═══ 3. BETREFF (bold) ═══
     betreff = f"Bewerbung als {job_title}" if job_title else "Bewerbung"
     story.append(Paragraph(betreff, style_betreff))
     story.append(Spacer(1, 8*mm))
 
-    # ═══ 5. LETTER BODY (from AI) ═══
-    # Clean up AI output: remove any header/address/date/betreff the AI might have added
+    # ═══ 4. LETTER BODY (from AI) ═══
     body_text = letter_text.strip()
 
-    # Remove lines that look like sender/recipient/date/betreff before the greeting
+    # Remove any header/address/date/betreff the AI might have added before the greeting
     clean_lines = body_text.split('\n')
     body_start = 0
     for idx, line in enumerate(clean_lines):
@@ -271,56 +375,80 @@ def generate_cover_letter_pdf(
         if stripped.lower().startswith('sehr geehrte') or stripped.lower().startswith('dear'):
             body_start = idx
             break
-        # Skip lines that are clearly header content
+        # Skip header-like lines
         if any(kw in stripped.lower() for kw in [
             'miroslav', 'weberlis', 'gerlikon', '8500', '079 602',
-            'bewerbung als', 'betreff', '@gmail', 'z.hd', 'z. hd'
+            'bewerbung als', 'betreff', '@gmail', 'z.hd', 'z. hd',
+            'im weberlis',
         ]):
             continue
-        if stripped and not any(kw in stripped.lower() for kw in ['sehr geehrte']):
-            # Check if this looks like an address line (short, no period at end)
-            if len(stripped) < 50 and not stripped.endswith('.'):
-                continue
-            else:
-                body_start = idx
-                break
+        if stripped and len(stripped) < 60 and not stripped.endswith('.'):
+            continue  # Likely address/header line
+        if stripped:
+            body_start = idx
+            break
 
     clean_body = '\n'.join(clean_lines[body_start:])
 
-    # Parse into paragraphs (split by double newline or single empty line)
-    paragraphs = []
-    current = []
+    # Parse into paragraphs, preserving bullet points
+    paragraphs = []  # list of (type, text) — type: 'text', 'bullet', 'greeting', 'closing', 'signature'
+    current_lines = []
+
+    def flush_current():
+        if current_lines:
+            text = ' '.join(current_lines)
+            paragraphs.append(('text', text))
+            current_lines.clear()
+
     for line in clean_body.split('\n'):
         stripped = line.strip()
-        if not stripped:
-            if current:
-                paragraphs.append(' '.join(current))
-                current = []
-        else:
-            current.append(stripped)
-    if current:
-        paragraphs.append(' '.join(current))
 
-    # Render paragraphs
-    for i, para in enumerate(paragraphs):
-        if not para:
+        if not stripped:
+            flush_current()
             continue
 
+        # Bullet point line
+        if stripped.startswith('- ') or stripped.startswith('• '):
+            flush_current()
+            bullet_text = stripped[2:].strip()
+            paragraphs.append(('bullet', bullet_text))
         # Greeting line
-        if para.lower().startswith('sehr geehrte') or para.lower().startswith('dear'):
-            story.append(Paragraph(para, style_greeting))
-            story.append(Spacer(1, 2*mm))
+        elif stripped.lower().startswith('sehr geehrte') or stripped.lower().startswith('dear'):
+            flush_current()
+            paragraphs.append(('greeting', stripped))
         # Closing
-        elif para.lower().startswith('freundliche gr') or para.lower().startswith('mit freundlichen'):
-            story.append(Spacer(1, 4*mm))
-            story.append(Paragraph(para, style_closing))
+        elif stripped.lower().startswith('freundliche gr') or stripped.lower().startswith('mit freundlichen'):
+            flush_current()
+            paragraphs.append(('closing', stripped))
         # Signature
-        elif para.strip() == 'Miroslav Mikulic':
-            story.append(Spacer(1, 10*mm))
-            story.append(Paragraph(para, style_closing))
-        # Regular body paragraph
+        elif stripped == 'Miroslav Mikulic':
+            flush_current()
+            paragraphs.append(('signature', stripped))
         else:
-            story.append(Paragraph(para, style_body))
+            current_lines.append(stripped)
+
+    flush_current()
+
+    # Render paragraphs
+    for ptype, text in paragraphs:
+        if not text:
+            continue
+
+        if ptype == 'greeting':
+            story.append(Paragraph(text, style_greeting))
+            story.append(Spacer(1, 4*mm))
+        elif ptype == 'bullet':
+            # Use bullet character
+            bullet_para = Paragraph(f"\u2022  {text}", style_bullet)
+            story.append(bullet_para)
+        elif ptype == 'closing':
+            story.append(Spacer(1, 6*mm))
+            story.append(Paragraph(text, style_closing))
+        elif ptype == 'signature':
+            story.append(Spacer(1, 10*mm))
+            story.append(Paragraph(text, style_closing))
+        else:
+            story.append(Paragraph(text, style_body))
 
     doc.build(story)
     return buffer.getvalue()

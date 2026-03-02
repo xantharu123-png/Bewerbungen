@@ -211,11 +211,19 @@ def get_job_details(url: str) -> dict:
                 el.decompose()
             description = content_div.get_text("\n", strip=True)
 
-        # Extract company
+        # Extract company — be careful to get just the name, not a large wrapper
         company = ""
-        company_el = soup.find(["span", "div", "a"], class_=re.compile(r"company|employer|firma", re.I))
+        company_el = soup.find(["span", "a"], class_=re.compile(r"company|employer|firma", re.I))
         if company_el:
-            company = company_el.get_text(strip=True)
+            company_text = company_el.get_text(strip=True)
+            # Only use if it's a reasonable company name (not a huge block of text)
+            if len(company_text) < 100:
+                company = company_text
+        # Fallback: try meta tags or og tags
+        if not company:
+            og_company = soup.find("meta", {"property": "og:site_name"})
+            if og_company:
+                company = og_company.get("content", "")[:100]
 
         # Extract contact info
         contact = ""
