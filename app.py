@@ -835,105 +835,114 @@ with tab2:
 # ═══════════════════════════════════════════
 with tab3:
     st.markdown("## 📄 Unterlagen verwalten")
-    
-    col1, col2 = st.columns(2)
-    
+
+    # ── Load existing documents ──
+    cv_doc = get_document("cv")
+    letter_doc = get_document("cover_letter")
+    diplom_doc = get_document("diplome")
+
+    # Auto-load CV text if not yet in session
+    if not st.session_state.cv_text and cv_doc:
+        try:
+            with open(cv_doc["path"], "rb") as f:
+                content = f.read()
+            if cv_doc["filename"].endswith(".pdf"):
+                st.session_state.cv_text = extract_text_from_pdf(content)
+            else:
+                st.session_state.cv_text = extract_text_from_docx(content)
+        except:
+            pass
+
+    # Auto-load cover letter text if not yet in session
+    if not st.session_state.cover_letter_text and letter_doc:
+        try:
+            with open(letter_doc["path"], "rb") as f:
+                content = f.read()
+            if letter_doc["filename"].endswith(".pdf"):
+                st.session_state.cover_letter_text = extract_text_from_pdf(content)
+            else:
+                st.session_state.cover_letter_text = extract_text_from_docx(content)
+        except:
+            pass
+
+    # ── Status overview ──
+    st.markdown("""
+    <div style="background:linear-gradient(135deg,#252d44 0%,#1e2536 100%);
+                border:1px solid rgba(255,255,255,0.08);border-radius:14px;
+                padding:20px 24px;margin-bottom:20px;">
+        <div style="display:flex;gap:32px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:150px;">
+                <div style="color:#9ba4b8;font-size:0.8rem;margin-bottom:4px;">Lebenslauf</div>
+                <div style="color:{};font-weight:600;">{}</div>
+            </div>
+            <div style="flex:1;min-width:150px;">
+                <div style="color:#9ba4b8;font-size:0.8rem;margin-bottom:4px;">Muster-Anschreiben</div>
+                <div style="color:{};font-weight:600;">{}</div>
+            </div>
+            <div style="flex:1;min-width:150px;">
+                <div style="color:#9ba4b8;font-size:0.8rem;margin-bottom:4px;">Diplome & Zertifikate</div>
+                <div style="color:{};font-weight:600;">{}</div>
+            </div>
+        </div>
+    </div>
+    """.format(
+        "#34d399" if cv_doc else "#f87171",
+        cv_doc['filename'] if cv_doc else "Nicht hochgeladen",
+        "#34d399" if letter_doc else "#f87171",
+        letter_doc['filename'] if letter_doc else "Nicht hochgeladen",
+        "#34d399" if diplom_doc else "#f87171",
+        diplom_doc['filename'] if diplom_doc else "Nicht hochgeladen",
+    ), unsafe_allow_html=True)
+
+    # ── Upload sections ──
+    col1, col2, col3 = st.columns(3)
+
     with col1:
-        st.markdown("### 📋 Lebenslauf (CV)")
-        cv_doc = get_document("cv")
-        if cv_doc:
-            st.success(f"✅ Gespeichert: {cv_doc['filename']}")
-            st.markdown(f"*Hochgeladen am: {cv_doc['uploaded_at'][:10]}*")
-        
+        st.markdown("##### 📋 Lebenslauf")
         cv_file = st.file_uploader(
-            "CV hochladen (PDF oder DOCX)",
+            "PDF oder DOCX",
             type=["pdf", "docx"],
-            key="cv_upload"
+            key="cv_upload",
+            label_visibility="collapsed"
         )
-        
         if cv_file:
             content = cv_file.read()
             save_document(cv_file.name, content, "cv")
-            
-            # Extract text
             if cv_file.name.endswith(".pdf"):
                 st.session_state.cv_text = extract_text_from_pdf(content)
             else:
                 st.session_state.cv_text = extract_text_from_docx(content)
-            
-            st.success(f"✅ '{cv_file.name}' gespeichert und Text extrahiert!")
-        
-        if st.session_state.cv_text:
-            with st.expander("📖 Extrahierter CV-Text"):
-                st.text_area("", value=st.session_state.cv_text[:2000], height=200, disabled=True)
-        elif cv_doc:
-            # Load existing CV text
-            try:
-                with open(cv_doc["path"], "rb") as f:
-                    content = f.read()
-                if cv_doc["filename"].endswith(".pdf"):
-                    st.session_state.cv_text = extract_text_from_pdf(content)
-                else:
-                    st.session_state.cv_text = extract_text_from_docx(content)
-            except:
-                pass
-    
+            st.rerun()
+
     with col2:
-        st.markdown("### ✉️ Muster-Anschreiben")
-        letter_doc = get_document("cover_letter")
-        if letter_doc:
-            st.success(f"✅ Gespeichert: {letter_doc['filename']}")
-        
+        st.markdown("##### ✉️ Muster-Anschreiben")
         letter_file = st.file_uploader(
-            "Anschreiben hochladen (PDF oder DOCX)",
+            "PDF oder DOCX",
             type=["pdf", "docx"],
-            key="letter_upload"
+            key="letter_upload",
+            label_visibility="collapsed"
         )
-        
         if letter_file:
             content = letter_file.read()
             save_document(letter_file.name, content, "cover_letter")
-            
             if letter_file.name.endswith(".pdf"):
                 st.session_state.cover_letter_text = extract_text_from_pdf(content)
             else:
                 st.session_state.cover_letter_text = extract_text_from_docx(content)
-            
-            st.success(f"✅ '{letter_file.name}' gespeichert!")
-        
-        if st.session_state.cover_letter_text:
-            with st.expander("📖 Anschreiben-Text (Vorlage)"):
-                st.text_area("", value=st.session_state.cover_letter_text[:2000], height=200, disabled=True)
-        elif letter_doc:
-            try:
-                with open(letter_doc["path"], "rb") as f:
-                    content = f.read()
-                if letter_doc["filename"].endswith(".pdf"):
-                    st.session_state.cover_letter_text = extract_text_from_pdf(content)
-                else:
-                    st.session_state.cover_letter_text = extract_text_from_docx(content)
-            except:
-                pass
-    
-    st.markdown("---")
-    st.markdown("### 🎓 Diplome & Zertifikate")
+            st.rerun()
 
-    diplom_doc = get_document("diplome")
-    if diplom_doc:
-        st.success(f"✅ Gespeichert: {diplom_doc['filename']}")
-        st.markdown(f"*Hochgeladen am: {diplom_doc['uploaded_at'][:10]}*")
-
-    diplom_file = st.file_uploader(
-        "Alle Diplome & Zertifikate als ein PDF hochladen",
-        type=["pdf"],
-        key="diplom_upload",
-        help="Scanne alle Diplome/Zertifikate in ein einziges PDF zusammen."
-    )
-
-    if diplom_file:
-        content = diplom_file.read()
-        save_document(diplom_file.name, content, "diplome")
-        st.success(f"✅ '{diplom_file.name}' gespeichert!")
+    with col3:
+        st.markdown("##### 🎓 Diplome & Zertifikate")
+        diplom_file = st.file_uploader(
+            "Ein PDF mit allen Diplomen",
+            type=["pdf"],
+            key="diplom_upload",
+            label_visibility="collapsed"
+        )
+        if diplom_file:
+            content = diplom_file.read()
+            save_document(diplom_file.name, content, "diplome")
+            st.rerun()
 
 # ═══════════════════════════════════════════
 # TAB 4: AI Cover Letter
