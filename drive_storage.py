@@ -184,12 +184,15 @@ def _find_file(service, folder_id: str, filename: str):
         return None
 
 
-def upload_file(filename: str, content: bytes, mime_type: str = "application/octet-stream") -> bool:
-    """Upload or update a file in the Google Drive folder."""
+def upload_file(filename: str, content: bytes, mime_type: str = "application/octet-stream") -> tuple[bool, str]:
+    """Upload or update a file in the Google Drive folder.
+
+    Returns (success, error_message). error_message is empty on success.
+    """
     service = _get_service()
     folder_id = _get_folder_id()
     if not service or not folder_id:
-        return False
+        return False, "Drive Service oder Folder ID fehlt"
 
     try:
         media = MediaInMemoryUpload(content, mimetype=mime_type)
@@ -207,10 +210,18 @@ def upload_file(filename: str, content: bytes, mime_type: str = "application/oct
                 body=metadata, media_body=media, fields="id"
             ).execute()
 
-        return True
+        return True, ""
     except Exception as e:
-        print(f"[Drive] Upload error for {filename}: {e}")
-        return False
+        error_msg = str(e)
+        print(f"[Drive] Upload error for {filename}: {error_msg}")
+        # Parse common errors
+        if "insufficientPermissions" in error_msg or "forbidden" in error_msg.lower():
+            return False, "Service Account hat keine Schreibrechte auf den Ordner. Bitte Ordner mit Editor-Zugriff teilen."
+        if "notFound" in error_msg:
+            return False, "Drive-Ordner nicht gefunden. Ordner-ID prüfen."
+        if "storageQuota" in error_msg:
+            return False, "Google Drive Speicherplatz voll."
+        return False, f"Upload-Fehler: {error_msg[:200]}"
 
 
 def download_file(filename: str) -> bytes | None:
@@ -242,7 +253,10 @@ def download_file(filename: str) -> bytes | None:
 def upload_json(filename: str, data: dict) -> bool:
     """Upload a dict as JSON file to Drive."""
     content = json.dumps(data, ensure_ascii=False, indent=2, default=str).encode("utf-8")
-    return upload_file(filename, content, mime_type="application/json")
+    success, error = upload_file(filename, content, mime_type="application/json")
+    if not success:
+        print(f"[Drive] JSON upload failed for {filename}: {error}")
+    return success
 
 
 def download_json(filename: str) -> dict | None:

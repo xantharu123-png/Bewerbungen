@@ -193,10 +193,9 @@ def save_document(name: str, content: bytes, doc_type: str) -> tuple[bool, str]:
             ext = name[name.rfind('.'):].lower() if '.' in name else ""
             mime = mime_types.get(ext, "application/octet-stream")
 
-            drive_ok = upload_file(f"docs/{name}", content, mime_type=mime)
+            drive_ok, upload_err = upload_file(f"docs/{name}", content, mime_type=mime)
             if drive_ok:
                 # Verify the file is actually on Drive
-                from drive_storage import verify_file_on_drive
                 if verify_file_on_drive(f"docs/{name}"):
                     drive_msg = f"✅ '{name}' auf Google Drive gesichert"
                     print(f"[DB] Document uploaded and verified on Drive: {name}")
@@ -204,8 +203,8 @@ def save_document(name: str, content: bytes, doc_type: str) -> tuple[bool, str]:
                     drive_msg = f"⚠️ '{name}' Upload schien OK, aber Datei nicht auf Drive gefunden"
                     print(f"[DB] WARNING: Upload returned True but file not found on Drive: {name}")
             else:
-                drive_msg = f"❌ '{name}' konnte nicht auf Drive hochgeladen werden"
-                print(f"[DB] Document upload failed: {name}")
+                drive_msg = f"❌ {upload_err}"
+                print(f"[DB] Document upload failed: {name} — {upload_err}")
         except Exception as e:
             drive_msg = f"❌ Drive Fehler: {e}"
             print(f"[DB] Document upload to Drive error: {e}")
