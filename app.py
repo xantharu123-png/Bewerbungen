@@ -634,65 +634,50 @@ with tab1:
                         # Use contact email if available, otherwise empty
                         to_email = st.session_state.get(f"contact_email_{i}", "")
                         subject_encoded = urllib.parse.quote(subject)
-                        body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{job.get('title', '')}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n\nFreundliche Grüsse\nMiroslav Mikulic"
+                        body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{job.get('title', '')}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n- Arbeitszeugnisse\n\nFreundliche Grüsse\nMiroslav Mikulic"
                         body_encoded = urllib.parse.quote(body_text)
                         gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1"
                         if to_email:
                             gmail_url += f"&to={urllib.parse.quote(to_email)}"
                         gmail_url += f"&su={subject_encoded}&body={body_encoded}"
 
-                        col_g1, col_g2, col_g3, col_g4 = st.columns(4)
-                        with col_g1:
+                        # Download buttons for all documents
+                        dl_cols = st.columns(5)
+                        with dl_cols[0]:
                             if pdf_bytes:
                                 st.download_button(
-                                    "📄 Anschreiben PDF",
+                                    "📄 Anschreiben",
                                     data=pdf_bytes,
                                     file_name=pdf_filename,
                                     mime="application/pdf",
                                     use_container_width=True,
                                     key=f"dl_pdf_{i}"
                                 )
-                        with col_g2:
-                            # CV download if available
+                        with dl_cols[1]:
                             cv_doc = get_document("cv")
                             if cv_doc:
                                 cv_path = Path(cv_doc.get("path", ""))
                                 if cv_path.exists():
                                     with open(cv_path, "rb") as f:
                                         cv_bytes = f.read()
-                                    st.download_button(
-                                        "📋 Lebenslauf",
-                                        data=cv_bytes,
-                                        file_name=cv_doc.get("filename", "Lebenslauf.pdf"),
-                                        mime="application/pdf",
-                                        use_container_width=True,
-                                        key=f"dl_cv_{i}"
-                                    )
-                                else:
-                                    st.caption("CV nicht lokal verfügbar")
-                            else:
-                                st.caption("Kein CV hochgeladen")
-                        with col_g3:
-                            # Diplome download if available
+                                    st.download_button("📋 CV", data=cv_bytes, file_name=cv_doc.get("filename", "Lebenslauf.pdf"), mime="application/pdf", use_container_width=True, key=f"dl_cv_{i}")
+                        with dl_cols[2]:
                             diploma_doc = get_document("diplome")
                             if diploma_doc:
                                 diploma_path = Path(diploma_doc.get("path", ""))
                                 if diploma_path.exists():
                                     with open(diploma_path, "rb") as f:
                                         diploma_bytes = f.read()
-                                    st.download_button(
-                                        "🎓 Diplome",
-                                        data=diploma_bytes,
-                                        file_name=diploma_doc.get("filename", "Diplome.pdf"),
-                                        mime="application/pdf",
-                                        use_container_width=True,
-                                        key=f"dl_diploma_{i}"
-                                    )
-                                else:
-                                    st.caption("Diplome nicht lokal")
-                            else:
-                                st.caption("Keine Diplome hochgeladen")
-                        with col_g4:
+                                    st.download_button("🎓 Diplome", data=diploma_bytes, file_name=diploma_doc.get("filename", "Diplome.pdf"), mime="application/pdf", use_container_width=True, key=f"dl_diploma_{i}")
+                        with dl_cols[3]:
+                            zeugnis_doc = get_document("zeugnisse")
+                            if zeugnis_doc:
+                                zeugnis_path = Path(zeugnis_doc.get("path", ""))
+                                if zeugnis_path.exists():
+                                    with open(zeugnis_path, "rb") as f:
+                                        zeugnis_bytes = f.read()
+                                    st.download_button("📝 Zeugnisse", data=zeugnis_bytes, file_name=zeugnis_doc.get("filename", "Arbeitszeugnisse.pdf"), mime="application/pdf", use_container_width=True, key=f"dl_zeugnis_{i}")
+                        with dl_cols[4]:
                             if st.button("🗑️ Schliessen", key=f"close_{i}", use_container_width=True):
                                 del st.session_state[f"letter_{i}"]
                                 st.rerun()
@@ -840,6 +825,7 @@ with tab3:
     cv_doc = get_document("cv")
     letter_doc = get_document("cover_letter")
     diplom_doc = get_document("diplome")
+    zeugnis_doc = get_document("zeugnisse")
 
     # Auto-load CV text if not yet in session
     if not st.session_state.cv_text and cv_doc:
@@ -865,45 +851,56 @@ with tab3:
         except:
             pass
 
-    # ── Status overview ──
+    # ── CSS fix for file uploader text visibility ──
     st.markdown("""
-    <div style="background:linear-gradient(135deg,#252d44 0%,#1e2536 100%);
-                border:1px solid rgba(255,255,255,0.08);border-radius:14px;
-                padding:20px 24px;margin-bottom:20px;">
-        <div style="display:flex;gap:32px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:150px;">
-                <div style="color:#9ba4b8;font-size:0.8rem;margin-bottom:4px;">Lebenslauf</div>
-                <div style="color:{};font-weight:600;">{}</div>
-            </div>
-            <div style="flex:1;min-width:150px;">
-                <div style="color:#9ba4b8;font-size:0.8rem;margin-bottom:4px;">Muster-Anschreiben</div>
-                <div style="color:{};font-weight:600;">{}</div>
-            </div>
-            <div style="flex:1;min-width:150px;">
-                <div style="color:#9ba4b8;font-size:0.8rem;margin-bottom:4px;">Diplome & Zertifikate</div>
-                <div style="color:{};font-weight:600;">{}</div>
-            </div>
-        </div>
-    </div>
-    """.format(
-        "#34d399" if cv_doc else "#f87171",
-        cv_doc['filename'] if cv_doc else "Nicht hochgeladen",
-        "#34d399" if letter_doc else "#f87171",
-        letter_doc['filename'] if letter_doc else "Nicht hochgeladen",
-        "#34d399" if diplom_doc else "#f87171",
-        diplom_doc['filename'] if diplom_doc else "Nicht hochgeladen",
-    ), unsafe_allow_html=True)
+    <style>
+        /* Make uploaded file names readable */
+        [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stFileUploader"] small,
+        [data-testid="stFileUploader"] span,
+        [data-testid="stFileUploader"] div[class*="UploadedFile"] span,
+        [data-testid="stFileUploader"] div[class*="uploadedFile"] span,
+        [data-testid="stFileUploader"] section > div > div span {
+            color: #e2e8f0 !important;
+        }
+        /* File size text */
+        [data-testid="stFileUploader"] div[class*="fileSize"],
+        [data-testid="stFileUploader"] div[data-testid="stFileUploaderFile"] span:last-child {
+            color: #9ba4b8 !important;
+        }
+        /* File name specifically */
+        [data-testid="stFileUploaderFile"] div:first-child span {
+            color: #e2e8f0 !important;
+            font-weight: 500;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Status overview ──
+    docs_info = [
+        ("Lebenslauf", cv_doc),
+        ("Muster-Anschreiben", letter_doc),
+        ("Diplome & Zertifikate", diplom_doc),
+        ("Arbeitszeugnisse", zeugnis_doc),
+    ]
+
+    status_html = '<div style="background:linear-gradient(135deg,#252d44 0%,#1e2536 100%);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px 24px;margin-bottom:20px;"><div style="display:flex;gap:24px;flex-wrap:wrap;">'
+    for label, doc in docs_info:
+        color = "#34d399" if doc else "#f87171"
+        name = doc['filename'] if doc else "Nicht hochgeladen"
+        status_html += f'<div style="flex:1;min-width:130px;"><div style="color:#9ba4b8;font-size:0.78rem;margin-bottom:4px;">{label}</div><div style="color:{color};font-weight:600;font-size:0.88rem;">{name}</div></div>'
+    status_html += '</div></div>'
+    st.markdown(status_html, unsafe_allow_html=True)
 
     # ── Upload sections ──
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("##### 📋 Lebenslauf")
+        st.markdown("##### 📋 Lebenslauf hochladen")
         cv_file = st.file_uploader(
-            "PDF oder DOCX",
+            "CV als PDF oder DOCX",
             type=["pdf", "docx"],
             key="cv_upload",
-            label_visibility="collapsed"
         )
         if cv_file:
             content = cv_file.read()
@@ -912,15 +909,14 @@ with tab3:
                 st.session_state.cv_text = extract_text_from_pdf(content)
             else:
                 st.session_state.cv_text = extract_text_from_docx(content)
-            st.rerun()
+            st.success(f"'{cv_file.name}' gespeichert!")
 
     with col2:
-        st.markdown("##### ✉️ Muster-Anschreiben")
+        st.markdown("##### ✉️ Muster-Anschreiben hochladen")
         letter_file = st.file_uploader(
-            "PDF oder DOCX",
+            "Anschreiben als PDF oder DOCX",
             type=["pdf", "docx"],
             key="letter_upload",
-            label_visibility="collapsed"
         )
         if letter_file:
             content = letter_file.read()
@@ -929,20 +925,33 @@ with tab3:
                 st.session_state.cover_letter_text = extract_text_from_pdf(content)
             else:
                 st.session_state.cover_letter_text = extract_text_from_docx(content)
-            st.rerun()
+            st.success(f"'{letter_file.name}' gespeichert!")
+
+    col3, col4 = st.columns(2)
 
     with col3:
-        st.markdown("##### 🎓 Diplome & Zertifikate")
+        st.markdown("##### 🎓 Diplome & Zertifikate hochladen")
         diplom_file = st.file_uploader(
-            "Ein PDF mit allen Diplomen",
+            "Alle Diplome als ein PDF",
             type=["pdf"],
             key="diplom_upload",
-            label_visibility="collapsed"
         )
         if diplom_file:
             content = diplom_file.read()
             save_document(diplom_file.name, content, "diplome")
-            st.rerun()
+            st.success(f"'{diplom_file.name}' gespeichert!")
+
+    with col4:
+        st.markdown("##### 📝 Arbeitszeugnisse hochladen")
+        zeugnis_file = st.file_uploader(
+            "Alle Arbeitszeugnisse als ein PDF",
+            type=["pdf"],
+            key="zeugnis_upload",
+        )
+        if zeugnis_file:
+            content = zeugnis_file.read()
+            save_document(zeugnis_file.name, content, "zeugnisse")
+            st.success(f"'{zeugnis_file.name}' gespeichert!")
 
 # ═══════════════════════════════════════════
 # TAB 4: AI Cover Letter
@@ -1189,56 +1198,35 @@ with tab4:
             st.warning(f"PDF-Erstellung fehlgeschlagen: {e}")
 
         st.markdown("#### 📥 Unterlagen herunterladen")
-        col_dl1, col_dl2, col_dl3, col_dl4 = st.columns(4)
-        with col_dl1:
+        dl_cols = st.columns(5)
+        with dl_cols[0]:
             if pdf_bytes:
-                st.download_button(
-                    "📄 Anschreiben PDF",
-                    data=pdf_bytes,
-                    file_name=pdf_filename,
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key="tab4_dl_pdf"
-                )
-        with col_dl2:
+                st.download_button("📄 Anschreiben", data=pdf_bytes, file_name=pdf_filename, mime="application/pdf", use_container_width=True, key="tab4_dl_pdf")
+        with dl_cols[1]:
             cv_doc = get_document("cv")
             if cv_doc:
                 cv_path = Path(cv_doc.get("path", ""))
                 if cv_path.exists():
                     with open(cv_path, "rb") as f:
                         cv_bytes = f.read()
-                    st.download_button(
-                        "📋 Lebenslauf",
-                        data=cv_bytes,
-                        file_name=cv_doc.get("filename", "Lebenslauf.pdf"),
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key="tab4_dl_cv"
-                    )
-                else:
-                    st.caption("CV nicht lokal verfügbar")
-            else:
-                st.caption("Kein CV hochgeladen")
-        with col_dl3:
+                    st.download_button("📋 CV", data=cv_bytes, file_name=cv_doc.get("filename", "Lebenslauf.pdf"), mime="application/pdf", use_container_width=True, key="tab4_dl_cv")
+        with dl_cols[2]:
             diploma_doc = get_document("diplome")
             if diploma_doc:
                 diploma_path = Path(diploma_doc.get("path", ""))
                 if diploma_path.exists():
                     with open(diploma_path, "rb") as f:
                         diploma_bytes = f.read()
-                    st.download_button(
-                        "🎓 Diplome",
-                        data=diploma_bytes,
-                        file_name=diploma_doc.get("filename", "Diplome.pdf"),
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key="tab4_dl_diploma"
-                    )
-                else:
-                    st.caption("Diplome nicht lokal")
-            else:
-                st.caption("Keine Diplome hochgeladen")
-        with col_dl4:
+                    st.download_button("🎓 Diplome", data=diploma_bytes, file_name=diploma_doc.get("filename", "Diplome.pdf"), mime="application/pdf", use_container_width=True, key="tab4_dl_diploma")
+        with dl_cols[3]:
+            zeugnis_doc = get_document("zeugnisse")
+            if zeugnis_doc:
+                zeugnis_path = Path(zeugnis_doc.get("path", ""))
+                if zeugnis_path.exists():
+                    with open(zeugnis_path, "rb") as f:
+                        zeugnis_bytes = f.read()
+                    st.download_button("📝 Zeugnisse", data=zeugnis_bytes, file_name=zeugnis_doc.get("filename", "Arbeitszeugnisse.pdf"), mime="application/pdf", use_container_width=True, key="tab4_dl_zeugnis")
+        with dl_cols[4]:
             if selected_job and st.button("💾 In Stelle speichern", use_container_width=True, key="tab4_save_job"):
                 update_job(selected_job["id"], {
                     "cover_letter": letter_text,
@@ -1251,7 +1239,7 @@ with tab4:
         subject = f"Bewerbung: {ai_title}" + (f" — {ai_company}" if ai_company else "")
         to_email = st.session_state.get("generated_letter_email", "")
         subject_encoded = urllib.parse.quote(subject)
-        body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{ai_title}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n\nFreundliche Grüsse\nMiroslav Mikulic"
+        body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{ai_title}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n- Arbeitszeugnisse\n\nFreundliche Grüsse\nMiroslav Mikulic"
         body_encoded = urllib.parse.quote(body_text)
         gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1"
         if to_email:
