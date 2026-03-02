@@ -145,20 +145,21 @@ def test_drive_connection() -> tuple[bool, str]:
         results = service.files().list(
             q=f"'{folder_id}' in parents and trashed=false",
             spaces="drive",
-            fields="files(id, name)",
-            pageSize=5
+            fields="files(id, name, size)",
+            pageSize=10
         ).execute()
         files = results.get("files", [])
-        return True, f"Verbunden — {len(files)} Datei(en) im Ordner"
+        file_names = [f.get("name", "?") for f in files[:5]]
+        return True, f"Verbunden — {len(files)} Datei(en): {', '.join(file_names)}"
     except Exception as e:
         error_msg = str(e)
         if "accessNotConfigured" in error_msg or "API has not been" in error_msg:
             return False, "Google Drive API nicht aktiviert im GCP Projekt"
         if "403" in error_msg:
-            return False, "Kein Zugriff auf den Drive-Ordner (Berechtigung fehlt)"
+            return False, f"Kein Zugriff auf den Drive-Ordner ({error_msg[:120]})"
         if "404" in error_msg:
-            return False, "Drive-Ordner nicht gefunden (ID falsch?)"
-        return False, f"Drive Fehler: {error_msg[:100]}"
+            return False, f"Drive-Ordner nicht gefunden ({error_msg[:120]})"
+        return False, f"Drive Fehler: {error_msg[:200]}"
 
 
 def verify_file_on_drive(filename: str) -> bool:
@@ -170,10 +171,53 @@ def verify_file_on_drive(filename: str) -> bool:
     return _find_file(service, folder_id, filename) is not None
 
 
-def _find_file(service, folder_id: str, filename: str):
-    """Find a file by name in the target folder. Returns file ID or None."""
+def _find_or_create_subfolder(service, parent_id: str, folder_name: str) -> str | None:
+    """Find or create a subfolder inside the parent folder. Returns folder ID."""
     try:
-        query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
+        query = (f"name='{folder_name}' and '{parent_id}' in parents "
+                 f"and mimeType='application/vnd.google-apps.folder' and trashed=false")
+        results = service.files().list(
+            q=query, spaces="drive", fields="files(id)"
+        ).execute()
+        files = results.get("files", [])
+        if files:
+            return files[0]["id"]
+        # Create it
+        metadata = {
+            "name": folder_name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_id],
+        }
+        folder = service.files().create(body=metadata, fields="id").execute()
+        print(f"[Drive] Created subfolder '{folder_name}' → {folder.get('id')}")
+        return folder.get("id")
+    except Exception as e:
+        print(f"[Drive] Subfolder error: {e}")
+        return None
+
+
+def _resolve_path(service, root_folder_id: str, filepath: str) -> tuple[str, str]:
+    """Resolve 'docs/filename.pdf' into (actual_parent_id, bare_filename).
+
+    If filepath contains '/', creates subfolders as needed.
+    """
+    parts = filepath.replace("\\", "/").split("/")
+    bare_name = parts[-1]
+    parent_id = root_folder_id
+    for subfolder in parts[:-1]:
+        sub_id = _find_or_create_subfolder(service, parent_id, subfolder)
+        if not sub_id:
+            return root_folder_id, bare_name  # fallback to root
+        parent_id = sub_id
+    return parent_id, bare_name
+
+
+def _find_file(service, folder_id: str, filename: str):
+    """Find a file by name in the target folder (supports 'docs/file.pdf' paths).
+    Returns file ID or None."""
+    try:
+        parent_id, bare_name = _resolve_path(service, folder_id, filename)
+        query = f"name='{bare_name}' and '{parent_id}' in parents and trashed=false"
         results = service.files().list(
             q=query, spaces="drive", fields="files(id, name)"
         ).execute()
@@ -195,6 +239,8 @@ def upload_file(filename: str, content: bytes, mime_type: str = "application/oct
         return False, "Drive Service oder Folder ID fehlt"
 
     try:
+        # Resolve path (e.g. "docs/file.pdf" → subfolder + bare name)
+        parent_id, bare_name = _resolve_path(service, folder_id, filename)
         media = MediaInMemoryUpload(content, mimetype=mime_type)
         existing_id = _find_file(service, folder_id, filename)
 
@@ -204,8 +250,8 @@ def upload_file(filename: str, content: bytes, mime_type: str = "application/oct
                 fileId=existing_id, media_body=media
             ).execute()
         else:
-            # Create new file
-            metadata = {"name": filename, "parents": [folder_id]}
+            # Create new file in resolved parent folder
+            metadata = {"name": bare_name, "parents": [parent_id]}
             service.files().create(
                 body=metadata, media_body=media, fields="id"
             ).execute()
@@ -214,14 +260,16 @@ def upload_file(filename: str, content: bytes, mime_type: str = "application/oct
     except Exception as e:
         error_msg = str(e)
         print(f"[Drive] Upload error for {filename}: {error_msg}")
-        # Parse common errors
+        # ALWAYS include raw error for debugging
+        raw_hint = f" (API: {error_msg[:150]})"
+        # Parse common errors but show raw text too
         if "insufficientPermissions" in error_msg or "forbidden" in error_msg.lower():
-            return False, "Service Account hat keine Schreibrechte auf den Ordner. Bitte Ordner mit Editor-Zugriff teilen."
+            return False, f"Service Account hat keine Schreibrechte auf den Ordner.{raw_hint}"
         if "notFound" in error_msg:
-            return False, "Drive-Ordner nicht gefunden. Ordner-ID prüfen."
+            return False, f"Drive-Ordner nicht gefunden.{raw_hint}"
         if "storageQuota" in error_msg:
-            return False, "Google Drive Speicherplatz voll."
-        return False, f"Upload-Fehler: {error_msg[:200]}"
+            return False, f"Speicher-Fehler — evtl. Service-Account-Quota.{raw_hint}"
+        return False, f"Upload-Fehler: {error_msg[:300]}"
 
 
 def download_file(filename: str) -> bytes | None:
