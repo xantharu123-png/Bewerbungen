@@ -566,9 +566,14 @@ with tab1:
                                 existing_urls.add(job["url"])
                                 st.success("Gespeichert!")
                                 st.rerun()
-                    else:
-                        if st.button("📋 Tracker", key=f"goto_{i}", use_container_width=True):
-                            st.info("→ Tab 'Meine Bewerbungen'")
+                    if st.button("✍️ Bewerbung", key=f"apply_{i}", use_container_width=True):
+                        # Save if not yet saved
+                        if not already_saved:
+                            save_job(job)
+                        # Set as selected job for AI tab
+                        st.session_state.selected_job_for_ai = job
+                        st.success("→ Wechsle zu Tab 'KI-Anschreiben'")
+                        st.rerun()
         
         if st.button("📥 Alle speichern", type="primary"):
             count = 0
@@ -1017,8 +1022,8 @@ with tab4:
             height=400
         )
         
-        col_copy, col_save = st.columns(2)
-        with col_copy:
+        col_dl, col_save, col_gmail = st.columns(3)
+        with col_dl:
             st.download_button(
                 "📥 Als TXT herunterladen",
                 data=letter_text.encode("utf-8"),
@@ -1033,6 +1038,23 @@ with tab4:
                     "status": "Interessant"
                 })
                 st.success("Gespeichert!")
+        with col_gmail:
+            # Gmail Draft button
+            import urllib.parse
+            subject = f"Bewerbung: {ai_title}" + (f" — {ai_company}" if ai_company else "")
+            body_encoded = urllib.parse.quote(letter_text)
+            subject_encoded = urllib.parse.quote(subject)
+            gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&su={subject_encoded}&body={body_encoded}"
+            st.markdown(
+                f'<a href="{gmail_url}" target="_blank" style="'
+                f'display:inline-block;width:100%;text-align:center;padding:8px 16px;'
+                f'background:linear-gradient(135deg,#ea4335,#d93025);color:white;'
+                f'border-radius:10px;text-decoration:none;font-weight:500;font-size:0.875rem;'
+                f'box-sizing:border-box;">'
+                f'📧 Gmail Draft öffnen</a>',
+                unsafe_allow_html=True
+            )
+            st.caption("Öffnet Gmail mit vorausgefülltem Betreff & Text")
 
 # ═══════════════════════════════════════════
 # TAB 5: Statistics
