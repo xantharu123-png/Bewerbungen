@@ -15,6 +15,7 @@ from database import (
     STATUS_OPTIONS, STATUS_COLORS
 )
 from scraper import search_multiple_platforms, get_job_details
+from drive_storage import is_drive_available
 from ai_assistant import (
     extract_text_from_pdf, extract_text_from_docx,
     generate_cover_letter, calculate_match_score
@@ -261,6 +262,13 @@ if "selected_job_for_ai" not in st.session_state:
 # ─────────────────────────────────────────────
 with st.sidebar:
     st.markdown("# 💼 JobTracker Pro")
+
+    # Drive sync status
+    if is_drive_available():
+        st.caption("☁️ Google Drive verbunden — Daten werden synchronisiert")
+    else:
+        st.caption("💾 Lokaler Speicher — Google Drive nicht konfiguriert")
+
     st.markdown("---")
     
     # Quick stats
