@@ -570,10 +570,82 @@ with tab1:
                         # Save if not yet saved
                         if not already_saved:
                             save_job(job)
-                        # Set as selected job for AI tab
-                        st.session_state.selected_job_for_ai = job
-                        st.success("→ Wechsle zu Tab 'KI-Anschreiben'")
-                        st.rerun()
+                        st.session_state[f"generating_{i}"] = True
+
+                # ── Inline cover letter generation ──
+                if st.session_state.get(f"generating_{i}"):
+                    st.markdown("---")
+                    cv_text = st.session_state.get("cv_text", "")
+                    if not cv_text:
+                        st.error("⚠️ Bitte zuerst deinen CV hochladen (Tab 'Unterlagen'), damit ein Anschreiben erstellt werden kann.")
+                        st.session_state[f"generating_{i}"] = False
+                    else:
+                        # Step 1: Fetch job description
+                        with st.spinner(f"📥 Lade Stellenbeschreibung für «{job['title']}»..."):
+                            details = get_job_details(job.get("url", ""))
+                            job_desc = details.get("description", "")
+                            if details.get("company") and not job.get("company"):
+                                job["company"] = details["company"]
+
+                        if not job_desc:
+                            st.warning("Konnte Stellenbeschreibung nicht laden. Bitte manuell im Tab 'KI-Anschreiben' eingeben.")
+                            st.session_state.selected_job_for_ai = job
+                            st.session_state[f"generating_{i}"] = False
+                        else:
+                            # Step 2: Generate cover letter
+                            with st.spinner("✍️ KI generiert Anschreiben... (ca. 15-30 Sek.)"):
+                                try:
+                                    letter = generate_cover_letter(
+                                        job_title=job.get("title", ""),
+                                        company=job.get("company", ""),
+                                        job_description=job_desc,
+                                        cv_text=cv_text,
+                                        existing_letter=st.session_state.get("cover_letter_text", ""),
+                                        language="de"
+                                    )
+                                    st.session_state[f"letter_{i}"] = letter
+                                    st.session_state[f"generating_{i}"] = False
+                                    st.success("✅ Anschreiben generiert!")
+                                except Exception as e:
+                                    st.error(f"Fehler bei der Generierung: {e}")
+                                    st.session_state[f"generating_{i}"] = False
+
+                # ── Show generated letter inline ──
+                if st.session_state.get(f"letter_{i}"):
+                    letter_text = st.session_state[f"letter_{i}"]
+                    with st.expander(f"✉️ Anschreiben für «{job['title']}»", expanded=True):
+                        st.text_area("", value=letter_text, height=300, key=f"letter_text_{i}")
+
+                        import urllib.parse
+                        subject = f"Bewerbung: {job.get('title', '')}" + (f" — {job.get('company', '')}" if job.get('company') else "")
+                        body_encoded = urllib.parse.quote(letter_text)
+                        subject_encoded = urllib.parse.quote(subject)
+                        gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&su={subject_encoded}&body={body_encoded}"
+
+                        col_g1, col_g2, col_g3 = st.columns(3)
+                        with col_g1:
+                            st.markdown(
+                                f'<a href="{gmail_url}" target="_blank" style="'
+                                f'display:inline-block;width:100%;text-align:center;padding:10px 16px;'
+                                f'background:linear-gradient(135deg,#ea4335,#d93025);color:white;'
+                                f'border-radius:10px;text-decoration:none;font-weight:600;font-size:0.9rem;'
+                                f'box-sizing:border-box;">'
+                                f'📧 Gmail Draft öffnen</a>',
+                                unsafe_allow_html=True
+                            )
+                        with col_g2:
+                            st.download_button(
+                                "📥 Als TXT",
+                                data=letter_text.encode("utf-8"),
+                                file_name=f"Anschreiben_{job.get('company','')}.txt".replace(" ", "_"),
+                                mime="text/plain",
+                                use_container_width=True,
+                                key=f"dl_{i}"
+                            )
+                        with col_g3:
+                            if st.button("🗑️ Schliessen", key=f"close_{i}", use_container_width=True):
+                                del st.session_state[f"letter_{i}"]
+                                st.rerun()
         
         if st.button("📥 Alle speichern", type="primary"):
             count = 0
