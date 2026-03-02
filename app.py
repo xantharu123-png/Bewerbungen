@@ -37,56 +37,60 @@ st.set_page_config(
 st.markdown("""
 <style>
     /* ══════════════════════════════════════════
-       Modern Light-Dark Theme — Clean & Professional
+       Warm Light Theme — Claude-inspired
        ══════════════════════════════════════════ */
 
-    /* Main background — warm dark, not pitch black */
+    /* Main background — warm off-white/cream */
     .stApp {
-        background-color: #1a1f2e;
+        background-color: #f5f0e8 !important;
     }
 
-    /* Sidebar — slightly lighter, clean separation */
+    /* Sidebar — warm white with subtle border */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #232a3e 0%, #1e2536 100%);
-        border-right: 1px solid rgba(255,255,255,0.06);
+        background: #faf7f2 !important;
+        border-right: 1px solid #e5ddd0;
     }
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 {
-        color: #e8ecf4;
+        color: #2d2417;
+    }
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] label {
+        color: #5c4f3d !important;
     }
 
     /* ── Cards ── */
     .job-card {
-        background: linear-gradient(135deg, #252d44 0%, #1e2536 100%);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid #e5ddd0;
+        border-radius: 12px;
         padding: 18px 22px;
-        margin-bottom: 14px;
-        transition: all 0.25s ease;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        margin-bottom: 12px;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
     .job-card:hover {
-        border-color: #6c8aff;
-        box-shadow: 0 4px 20px rgba(108,138,255,0.15);
+        border-color: #c4956a;
+        box-shadow: 0 4px 16px rgba(180,130,80,0.1);
         transform: translateY(-1px);
     }
 
     .job-title {
         font-size: 1.05rem;
         font-weight: 600;
-        color: #f0f2f8;
+        color: #2d2417;
         margin-bottom: 6px;
-        letter-spacing: -0.01em;
     }
     .job-meta {
         font-size: 0.82rem;
-        color: #9ba4b8;
+        color: #7a6b56;
         margin-bottom: 8px;
         line-height: 1.6;
     }
     .job-company {
-        color: #7ba3ff;
+        color: #b47a3e;
         font-weight: 600;
     }
 
@@ -98,58 +102,57 @@ st.markdown("""
         font-size: 0.73rem;
         font-weight: 600;
         color: white;
-        letter-spacing: 0.02em;
     }
 
     /* ── Score ── */
-    .score-high { color: #34d399; font-size: 1.4rem; font-weight: 700; }
-    .score-mid  { color: #fbbf24; font-size: 1.4rem; font-weight: 700; }
-    .score-low  { color: #f87171; font-size: 1.4rem; font-weight: 700; }
+    .score-high { color: #16a34a; font-size: 1.4rem; font-weight: 700; }
+    .score-mid  { color: #d97706; font-size: 1.4rem; font-weight: 700; }
+    .score-low  { color: #dc2626; font-size: 1.4rem; font-weight: 700; }
 
     /* ── Metric cards ── */
     .metric-card {
-        background: linear-gradient(135deg, #252d44 0%, #2a3350 100%);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid #e5ddd0;
+        border-radius: 12px;
         padding: 22px;
         text-align: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
     .metric-num {
         font-size: 2rem;
         font-weight: 700;
-        color: #7ba3ff;
+        color: #b47a3e;
     }
     .metric-label {
         font-size: 0.85rem;
-        color: #9ba4b8;
+        color: #7a6b56;
         margin-top: 4px;
     }
 
     /* ── Tabs — pill style ── */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
-        background: #232a3e;
+        gap: 4px;
+        background: #ede7db;
         border-radius: 12px;
         padding: 4px;
     }
     .stTabs [data-baseweb="tab"] {
         background: transparent;
         border-radius: 10px;
-        color: #9ba4b8;
+        color: #7a6b56;
         padding: 8px 18px;
         font-weight: 500;
         transition: all 0.2s ease;
     }
     .stTabs [data-baseweb="tab"]:hover {
-        color: #d0d7e6;
-        background: rgba(255,255,255,0.04);
+        color: #2d2417;
+        background: rgba(255,255,255,0.6);
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #5b7cfa 0%, #7b5cf5 100%) !important;
+        background: #c4956a !important;
         color: white !important;
         font-weight: 600;
-        box-shadow: 0 2px 12px rgba(91,124,250,0.3);
+        box-shadow: 0 2px 8px rgba(196,149,106,0.3);
     }
 
     /* ── Buttons ── */
@@ -160,56 +163,61 @@ st.markdown("""
     }
     .stButton button:hover {
         transform: translateY(-1px);
-        box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.08);
     }
     .stButton button[kind="primary"] {
-        background: linear-gradient(135deg, #5b7cfa 0%, #7b5cf5 100%) !important;
+        background: #c4956a !important;
+        color: white !important;
         border: none;
+    }
+    .stButton button[kind="primary"]:hover {
+        background: #b0844f !important;
     }
 
     /* ── Input fields ── */
     .stTextInput input, .stSelectbox select, .stTextArea textarea {
-        background: #252d44 !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
-        color: #e8ecf4 !important;
+        background: #ffffff !important;
+        border: 1px solid #ddd4c4 !important;
+        color: #2d2417 !important;
         border-radius: 10px !important;
         transition: border-color 0.2s ease;
     }
     .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #6c8aff !important;
-        box-shadow: 0 0 0 2px rgba(108,138,255,0.15) !important;
+        border-color: #c4956a !important;
+        box-shadow: 0 0 0 2px rgba(196,149,106,0.15) !important;
     }
 
     /* ── Multiselect ── */
     .stMultiSelect [data-baseweb="tag"] {
-        background: linear-gradient(135deg, #5b7cfa 0%, #7b5cf5 100%) !important;
+        background: #c4956a !important;
         border-radius: 8px;
         color: white;
     }
 
     /* ── Expanders ── */
     div[data-testid="stExpander"] {
-        background: #232a3e;
-        border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid #e5ddd0;
+        border-radius: 12px;
     }
 
     /* ── Typography ── */
-    h1, h2, h3 { color: #f0f2f8; }
+    h1, h2, h3 { color: #2d2417; }
     h2 { letter-spacing: -0.02em; }
-    p, li { color: #b0b8cc; }
+    p, li { color: #4a3d2e; }
+    label { color: #5c4f3d !important; }
 
     /* ── Alerts ── */
     .stAlert { border-radius: 12px; }
 
     /* ── Search header ── */
     .search-header {
-        background: linear-gradient(135deg, #252d44 0%, #2d2054 50%, #1e2536 100%);
-        border: 1px solid rgba(108,138,255,0.2);
-        border-radius: 16px;
+        background: linear-gradient(135deg, #faf7f2 0%, #f0e6d6 100%);
+        border: 1px solid #ddd4c4;
+        border-radius: 14px;
         padding: 28px;
         margin-bottom: 24px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     }
 
     /* ── File uploader ── */
@@ -219,23 +227,45 @@ st.markdown("""
 
     /* ── Dividers ── */
     hr {
-        border-color: rgba(255,255,255,0.06) !important;
+        border-color: #e5ddd0 !important;
     }
 
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #3a4260; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #5b7cfa; }
+    ::-webkit-scrollbar-thumb { background: #d4c9b8; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #c4956a; }
 
     /* ── Sidebar metrics ── */
     [data-testid="stSidebar"] [data-testid="stMetric"] {
-        background: rgba(255,255,255,0.03);
+        background: rgba(196,149,106,0.06);
         border-radius: 10px;
         padding: 8px 12px;
     }
     [data-testid="stSidebar"] [data-testid="stMetricValue"] {
-        color: #7ba3ff;
+        color: #b47a3e;
+    }
+
+    /* ── Download buttons ── */
+    .stDownloadButton button {
+        background: #ffffff !important;
+        border: 1px solid #ddd4c4 !important;
+        color: #2d2417 !important;
+    }
+    .stDownloadButton button:hover {
+        background: #f5f0e8 !important;
+        border-color: #c4956a !important;
+    }
+
+    /* ── Selectbox dropdown ── */
+    [data-baseweb="select"] > div {
+        background: #ffffff !important;
+        border-color: #ddd4c4 !important;
+    }
+
+    /* ── Progress bar ── */
+    .stProgress > div > div {
+        background: #c4956a !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -325,8 +355,8 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.markdown("""
     <div class="search-header">
-        <h2 style="margin:0; color:#e2e8f0;">🔍 Stellensuche Schweiz</h2>
-        <p style="margin:6px 0 0 0; color:#94a3b8;">Wähle Jobprofile aus und durchsuche jobs.ch nach aktuellen Stellen</p>
+        <h2 style="margin:0; color:#2d2417;">🔍 Stellensuche Schweiz</h2>
+        <p style="margin:6px 0 0 0; color:#7a6b56;">Wähle Jobprofile aus und durchsuche jobs.ch nach aktuellen Stellen</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -543,7 +573,7 @@ with tab1:
                 col_main, col_btn = st.columns([5, 1])
                 
                 with col_main:
-                    saved_badge = ' <span style="background:#22c55e;color:white;padding:2px 8px;border-radius:10px;font-size:0.7rem;">✓ Gespeichert</span>' if already_saved else ""
+                    saved_badge = ' <span style="background:#16a34a;color:white;padding:2px 8px;border-radius:10px;font-size:0.7rem;">✓ Gespeichert</span>' if already_saved else ""
                     st.markdown(f"""
                     <div class="job-card">
                         <div class="job-title">{job['title']}{saved_badge}</div>
@@ -851,31 +881,6 @@ with tab3:
         except:
             pass
 
-    # ── CSS fix for file uploader text visibility ──
-    st.markdown("""
-    <style>
-        /* Make uploaded file names readable */
-        [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] p,
-        [data-testid="stFileUploader"] small,
-        [data-testid="stFileUploader"] span,
-        [data-testid="stFileUploader"] div[class*="UploadedFile"] span,
-        [data-testid="stFileUploader"] div[class*="uploadedFile"] span,
-        [data-testid="stFileUploader"] section > div > div span {
-            color: #e2e8f0 !important;
-        }
-        /* File size text */
-        [data-testid="stFileUploader"] div[class*="fileSize"],
-        [data-testid="stFileUploader"] div[data-testid="stFileUploaderFile"] span:last-child {
-            color: #9ba4b8 !important;
-        }
-        /* File name specifically */
-        [data-testid="stFileUploaderFile"] div:first-child span {
-            color: #e2e8f0 !important;
-            font-weight: 500;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
     # ── Status overview ──
     docs_info = [
         ("Lebenslauf", cv_doc),
@@ -884,11 +889,11 @@ with tab3:
         ("Arbeitszeugnisse", zeugnis_doc),
     ]
 
-    status_html = '<div style="background:linear-gradient(135deg,#252d44 0%,#1e2536 100%);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:20px 24px;margin-bottom:20px;"><div style="display:flex;gap:24px;flex-wrap:wrap;">'
+    status_html = '<div style="background:#ffffff;border:1px solid #e5ddd0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.04);"><div style="display:flex;gap:24px;flex-wrap:wrap;">'
     for label, doc in docs_info:
-        color = "#34d399" if doc else "#f87171"
+        color = "#16a34a" if doc else "#dc2626"
         name = doc['filename'] if doc else "Nicht hochgeladen"
-        status_html += f'<div style="flex:1;min-width:130px;"><div style="color:#9ba4b8;font-size:0.78rem;margin-bottom:4px;">{label}</div><div style="color:{color};font-weight:600;font-size:0.88rem;">{name}</div></div>'
+        status_html += f'<div style="flex:1;min-width:130px;"><div style="color:#7a6b56;font-size:0.78rem;margin-bottom:4px;">{label}</div><div style="color:{color};font-weight:600;font-size:0.88rem;">{name}</div></div>'
     status_html += '</div></div>'
     st.markdown(status_html, unsafe_allow_html=True)
 
@@ -1001,7 +1006,7 @@ with tab4:
                 <span class="job-company">{ai_company or '–'}</span>
                 {"&nbsp;&nbsp;📍 " + selected_job.get('location', '') if selected_job.get('location') else ""}
                 {"&nbsp;&nbsp;⏱️ " + selected_job.get('pensum', '') if selected_job.get('pensum') else ""}
-                {"&nbsp;&nbsp;🔗 <a href='" + ai_url + "' target='_blank' style='color:#4a9eff;'>Zum Inserat</a>" if ai_url else ""}
+                {"&nbsp;&nbsp;🔗 <a href='" + ai_url + "' target='_blank' style='color:#b47a3e;'>Zum Inserat</a>" if ai_url else ""}
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1309,9 +1314,9 @@ with tab5:
                 hole=0.4
             )
             fig_pie.update_layout(
-                paper_bgcolor="#1e2235",
-                plot_bgcolor="#1e2235",
-                font={"color": "#e2e8f0"},
+                paper_bgcolor="#faf7f2",
+                plot_bgcolor="#faf7f2",
+                font={"color": "#2d2417"},
                 showlegend=True
             )
             st.plotly_chart(fig_pie, use_container_width=True)
@@ -1327,14 +1332,14 @@ with tab5:
                 fig_bar = px.bar(
                     weekly, x="week", y="count",
                     title="Stellen hinzugefügt (pro Woche)",
-                    color_discrete_sequence=["#4a6cf7"]
+                    color_discrete_sequence=["#c4956a"]
                 )
                 fig_bar.update_layout(
                     paper_bgcolor="#1e2235",
                     plot_bgcolor="#1e2235",
                     font={"color": "#e2e8f0"},
-                    xaxis={"gridcolor": "#2d3154"},
-                    yaxis={"gridcolor": "#2d3154"}
+                    xaxis={"gridcolor": "#e5ddd0"},
+                    yaxis={"gridcolor": "#e5ddd0"}
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
         
@@ -1356,9 +1361,9 @@ with tab5:
                 title="Match-Scores nach Stelle"
             )
             fig_scores.update_layout(
-                paper_bgcolor="#1e2235",
-                plot_bgcolor="#1e2235",
-                font={"color": "#e2e8f0"},
+                paper_bgcolor="#faf7f2",
+                plot_bgcolor="#faf7f2",
+                font={"color": "#2d2417"},
                 height=max(300, len(jobs_with_scores) * 40)
             )
             st.plotly_chart(fig_scores, use_container_width=True)
