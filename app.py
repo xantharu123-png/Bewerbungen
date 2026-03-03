@@ -466,7 +466,7 @@ with tab1:
         if custom_search.strip():
             all_terms.append(custom_search.strip())
         st.caption(f"🔎 {len(all_terms)} Suchbegriff(e) ausgewählt — jeder wird einzeln gesucht")
-    st.caption("📡 Quellen: [jobs.ch](https://www.jobs.ch) — weitere Plattformen in Planung")
+    st.caption("📡 Quellen: [jobs.ch](https://www.jobs.ch) · [Indeed.ch](https://ch.indeed.com) · [LinkedIn](https://www.linkedin.com/jobs) · [JobScout24](https://www.jobscout24.ch) · 20 ERP-Firmen Karriereseiten")
 
     if run_search:
         # Build search terms from selected profiles + custom
