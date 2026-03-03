@@ -609,19 +609,18 @@ with tab1:
                         score_badge = f' <span style="background:{s_bg};color:{s_color};padding:2px 7px;border-radius:8px;font-size:0.7rem;font-weight:600;">{quick_score}%</span>'
                     else:
                         score_badge = ""
-                    st.markdown(f"""
-                    <div class="job-card">
-                        <div class="job-title">{job['title']}{score_badge}{saved_badge}</div>
-                        <div class="job-meta">
-                            <span class="job-company">{job.get('company', '–')}</span>
-                            {"&nbsp;&nbsp;📍 " + job['location'] if job.get('location') else ""}
-                            {"&nbsp;&nbsp;🗓️ " + job.get('posted_date_raw', job.get('posted_date', '')) if job.get('posted_date_raw') or job.get('posted_date') else ""}
-                            {"&nbsp;&nbsp;⏱️ " + job['pensum'] if job.get('pensum') else ""}
-                            &nbsp;&nbsp;📌 {job.get('source', 'jobs.ch')}
-                        </div>
-                        <a href="{job['url']}" target="_blank" style="color:#4a9eff;font-size:0.8rem;">🔗 Zum Inserat →</a>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Build meta parts without blank lines (Streamlit 1.45+ breaks HTML on blank lines)
+                    meta_parts = [f'<span class="job-company">{job.get("company", "–")}</span>']
+                    if job.get('location'):
+                        meta_parts.append(f'&nbsp;&nbsp;📍 {job["location"]}')
+                    if job.get('posted_date_raw') or job.get('posted_date'):
+                        meta_parts.append(f'&nbsp;&nbsp;🗓️ {job.get("posted_date_raw", job.get("posted_date", ""))}')
+                    if job.get('pensum'):
+                        meta_parts.append(f'&nbsp;&nbsp;⏱️ {job["pensum"]}')
+                    meta_parts.append(f'&nbsp;&nbsp;📌 {job.get("source", "jobs.ch")}')
+                    meta_html = " ".join(meta_parts)
+                    card_html = f'<div class="job-card"><div class="job-title">{job["title"]}{score_badge}{saved_badge}</div><div class="job-meta">{meta_html}</div><a href="{job["url"]}" target="_blank" style="color:#4a9eff;font-size:0.8rem;">🔗 Zum Inserat →</a></div>'
+                    st.markdown(card_html, unsafe_allow_html=True)
 
                 with col_btn:
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -1105,17 +1104,17 @@ with tab4:
         ai_url = selected_job.get("url", "")
 
         # Show selected job info
-        st.markdown(f"""
-        <div class="job-card">
-            <div class="job-title">{ai_title}</div>
-            <div class="job-meta">
-                <span class="job-company">{ai_company or '–'}</span>
-                {"&nbsp;&nbsp;📍 " + selected_job.get('location', '') if selected_job.get('location') else ""}
-                {"&nbsp;&nbsp;⏱️ " + selected_job.get('pensum', '') if selected_job.get('pensum') else ""}
-                {"&nbsp;&nbsp;🔗 <a href='" + ai_url + "' target='_blank' style='color:#b47a3e;'>Zum Inserat</a>" if ai_url else ""}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Build meta parts without blank lines (Streamlit 1.45+ breaks HTML on blank lines)
+        ai_meta_parts = [f'<span class="job-company">{ai_company or "–"}</span>']
+        if selected_job.get('location'):
+            ai_meta_parts.append(f'&nbsp;&nbsp;📍 {selected_job["location"]}')
+        if selected_job.get('pensum'):
+            ai_meta_parts.append(f'&nbsp;&nbsp;⏱️ {selected_job["pensum"]}')
+        if ai_url:
+            ai_meta_parts.append(f'&nbsp;&nbsp;🔗 <a href="{ai_url}" target="_blank" style="color:#b47a3e;">Zum Inserat</a>')
+        ai_meta_html = " ".join(ai_meta_parts)
+        ai_card_html = f'<div class="job-card"><div class="job-title">{ai_title}</div><div class="job-meta">{ai_meta_html}</div></div>'
+        st.markdown(ai_card_html, unsafe_allow_html=True)
 
         # Auto-fetch job description if not already loaded for this job
         job_desc_key = f"ai_job_desc_{selected_job.get('id', '')}"

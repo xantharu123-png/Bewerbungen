@@ -249,7 +249,11 @@ def get_job_details(url: str) -> dict:
 
 
 def search_indeed_ch(keywords: list, days_back: int = 30) -> list:
-    """Search Indeed Switzerland for job listings."""
+    """Search Indeed Switzerland for job listings.
+
+    Note: Indeed actively blocks automated scraping (HTTP 401/403).
+    This function fails gracefully and returns an empty list if blocked.
+    """
     results = []
     base_url = "https://ch.indeed.com/jobs"
     seen_urls = set()
@@ -265,6 +269,9 @@ def search_indeed_ch(keywords: list, days_back: int = 30) -> list:
 
     try:
         resp = requests.get(base_url, params=params, headers=HEADERS, timeout=15)
+        if resp.status_code in (401, 403):
+            # Indeed blocks scraping — fail silently to avoid log spam
+            return []
         if resp.status_code != 200:
             print(f"[Indeed] HTTP {resp.status_code} for '{query}'")
             return []
@@ -526,19 +533,19 @@ ERP_COMPANIES_CH = [
     {"name": "BaseNet Informatik AG", "url": "https://www.basenet.ch/jobs", "focus": "Abacus, ERP"},
     {"name": "Dynasoft AG", "url": "https://www.dynasoft.ch/jobs", "focus": "ERP, Dynamics"},
     {"name": "Anica AG", "url": "https://anica.ch/karriere", "focus": "Abacus"},
-    {"name": "Nybble Group", "url": "https://nybble.ch/karriere", "focus": "ERP"},
+    # {"name": "Nybble Group", "url": "https://nybble.ch/karriere", "focus": "ERP"},  # Domain offline (2026-03)
     {"name": "Elvadata AG", "url": "https://www.elvadata.ch/karriere", "focus": "ERP, SAP"},
-    {"name": "Fusion Consulting", "url": "https://fusion-consulting.ch/careers", "focus": "SAP"},
-    {"name": "GAMBIT Consulting", "url": "https://gambitswitzerland.ch/karriere", "focus": "SAP"},
+    # {"name": "Fusion Consulting", "url": "https://fusion-consulting.ch/careers", "focus": "SAP"},  # Domain offline (2026-03)
+    # {"name": "GAMBIT Consulting", "url": "https://gambitswitzerland.ch/karriere", "focus": "SAP"},  # Domain nicht auflösbar (2026-03)
     {"name": "Innflow AG", "url": "https://www.innflow.com/de/karriere", "focus": "SAP"},
     {"name": "CONSILIO GmbH", "url": "https://www.consilio-gmbh.de/karriere", "focus": "SAP"},
     {"name": "Ekspert AG", "url": "https://ekspert.com/karriere", "focus": "Abacus"},
-    {"name": "Mattig-Suter und Partner", "url": "https://mattig.swiss/karriere", "focus": "Abacus"},
+    # {"name": "Mattig-Suter und Partner", "url": "https://mattig.swiss/karriere", "focus": "Abacus"},  # SSL-Fehler (2026-03)
     {"name": "PwC Switzerland", "url": "https://www.pwc.ch/en/careers", "focus": "SAP, Abacus"},
     {"name": "KCS.net", "url": "https://www.kcsnet.com/karriere", "focus": "Dynamics"},
     {"name": "Synoptek Switzerland", "url": "https://synoptek.com/careers", "focus": "Dynamics 365"},
     {"name": "Fidigit AG", "url": "https://fidigit.ch/karriere", "focus": "Abacus"},
-    {"name": "Data World Consulting AG", "url": "https://dataworldconsulting.ch/karriere", "focus": "SAP"},
+    # {"name": "Data World Consulting AG", "url": "https://dataworldconsulting.ch/karriere", "focus": "SAP"},  # Domain nicht auflösbar (2026-03)
     {"name": "Opacc Software AG", "url": "https://www.opacc.ch/de/jobs", "focus": "ERP"},
     {"name": "redIT Services AG", "url": "https://www.redit.ch/jobs", "focus": "ERP, Dynamics"},
 ]

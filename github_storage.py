@@ -51,15 +51,27 @@ def _get_config() -> dict:
     return config
 
 
+_github_warning_shown = False
+
 def is_github_available() -> bool:
     """Check if GitHub storage is configured."""
+    global _github_warning_shown
     cfg = _get_config()
     token = cfg.get("token", "")
     repo = cfg.get("repo", "")
     has_token = bool(token)
     has_repo = bool(repo)
-    print(f"[GitHub] is_available check: token={'yes' if has_token else 'NO'} ({len(token)} chars), repo={'yes' if has_repo else 'NO'} ({repo})")
-    return has_token and has_repo
+    available = has_token and has_repo
+    # Only log the warning once to avoid log spam
+    if not available and not _github_warning_shown:
+        missing = []
+        if not has_token:
+            missing.append("GITHUB_TOKEN")
+        if not has_repo:
+            missing.append("GITHUB_REPO")
+        print(f"[GitHub] Nicht verfügbar — fehlend: {', '.join(missing)}. Lokaler Speicher wird verwendet.")
+        _github_warning_shown = True
+    return available
 
 
 def _headers() -> dict:
