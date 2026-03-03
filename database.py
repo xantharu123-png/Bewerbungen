@@ -90,17 +90,33 @@ def test_storage_connection() -> tuple[bool, str]:
     return False, "Kein Cloud-Speicher konfiguriert"
 
 
+def _local_db_is_empty() -> bool:
+    """Check if local DB file is missing or has no real data (no jobs, no docs)."""
+    if not DB_PATH.exists():
+        return True
+    if DB_PATH.stat().st_size < 10:
+        return True
+    try:
+        with open(DB_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        has_jobs = len(data.get("jobs", [])) > 0
+        has_docs = len(data.get("documents", {})) > 0
+        return not has_jobs and not has_docs
+    except Exception:
+        return True
+
+
 def init_db():
     """Initialize database files and directories.
     If cloud storage is available, sync from cloud on first load."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     DOCS_PATH.mkdir(parents=True, exist_ok=True)
 
-    # Try to restore from cloud if local DB is missing or empty
-    if not DB_PATH.exists() or DB_PATH.stat().st_size < 10:
+    # Try to restore from cloud if local DB is missing or effectively empty
+    if _local_db_is_empty():
         backend = _get_backend()
         if backend:
-            print(f"[DB] Restoring from {backend}...")
+            print(f"[DB] Local DB leer — lade von {backend}...")
             cloud_data = _cloud_download()
             if cloud_data:
                 # Extract embedded documents to local files
