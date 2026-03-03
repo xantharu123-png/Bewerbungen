@@ -15,7 +15,7 @@ from database import (
     STATUS_OPTIONS, STATUS_COLORS
 )
 from scraper import search_multiple_platforms, get_job_details
-from drive_storage import is_drive_available, test_drive_connection
+from database import test_storage_connection
 from ai_assistant import (
     extract_text_from_pdf, extract_text_from_docx,
     generate_cover_letter, generate_cover_letter_pdf, calculate_match_score,
@@ -294,11 +294,12 @@ if "selected_job_for_ai" not in st.session_state:
 with st.sidebar:
     st.markdown("# 💼 JobTracker Pro")
 
-    # Drive sync status
-    if is_drive_available():
-        st.caption("☁️ Google Drive verbunden — Daten bleiben erhalten")
+    # Cloud sync status
+    cloud_ok, cloud_msg = test_storage_connection()
+    if cloud_ok:
+        st.caption(f"☁️ {cloud_msg} — Daten bleiben erhalten")
     else:
-        st.caption("⚠️ Kein Google Drive — Daten gehen bei Redeploy verloren!")
+        st.caption("⚠️ Kein Cloud-Speicher — Daten gehen bei Redeploy verloren!")
 
     st.markdown("---")
 
@@ -965,8 +966,8 @@ with tab3:
     # Count uploaded
     uploaded_count = sum(1 for d in docs_config if d["doc"])
 
-    # Drive status check
-    drive_connected, drive_status_msg = test_drive_connection()
+    # Cloud storage status check
+    drive_connected, drive_status_msg = test_storage_connection()
     if drive_connected:
         drive_badge = f'<span style="color:#16a34a;font-size:0.82rem;">☁️ {drive_status_msg}</span>'
     else:
@@ -1571,7 +1572,7 @@ with tab6:
         'color:#7a6b56;font-size:0.82rem;">'
         '<strong>ℹ️ Über JobTracker Pro</strong><br>'
         'Absender-E-Mail: miroslav.mikulic@gmail.com<br>'
-        'Daten gespeichert via: ' + ('Google Drive ☁️' if is_drive_available() else 'Lokaler Speicher 💾') +
+        'Daten gespeichert via: ' + ('GitHub ☁️' if cloud_ok else 'Lokaler Speicher 💾') +
         '</div>',
         unsafe_allow_html=True,
     )

@@ -4,41 +4,112 @@ import base64
 from datetime import datetime
 from pathlib import Path
 
-# Google Drive sync (optional — works without it too)
-from drive_storage import (
-    is_drive_available, upload_json, download_json,
-    test_drive_connection
-)
+# Storage backends — try GitHub first, then Google Drive, then local-only
+_storage_backend = None  # "github", "drive", or None
+
+try:
+    from github_storage import (
+        is_github_available,
+        upload_json as _github_upload,
+        download_json as _github_download,
+        test_github_connection,
+    )
+except ImportError:
+    is_github_available = lambda: False
+    test_github_connection = lambda: (False, "github_storage.py nicht gefunden")
+
+try:
+    from drive_storage import (
+        is_drive_available,
+        upload_json as _drive_upload,
+        download_json as _drive_download,
+        test_drive_connection,
+    )
+except ImportError:
+    is_drive_available = lambda: False
+    test_drive_connection = lambda: (False, "drive_storage.py nicht gefunden")
+
 
 DB_PATH = Path("data/jobs.json")
 DOCS_PATH = Path("data/documents")
+GITHUB_DB_PATH = "data/jobs.json"  # Path inside the repo
 DRIVE_DB_NAME = "jobtracker_data.json"
+
+
+def _get_backend() -> str | None:
+    """Determine which cloud storage backend to use."""
+    global _storage_backend
+    if _storage_backend is not None:
+        return _storage_backend if _storage_backend else None
+
+    if is_github_available():
+        _storage_backend = "github"
+        print("[DB] Using GitHub as storage backend")
+    elif is_drive_available():
+        _storage_backend = "drive"
+        print("[DB] Using Google Drive as storage backend")
+    else:
+        _storage_backend = ""
+        print("[DB] No cloud storage available — local only")
+
+    return _storage_backend if _storage_backend else None
+
+
+def _cloud_download() -> dict | None:
+    """Download DB from whichever cloud backend is available."""
+    backend = _get_backend()
+    if backend == "github":
+        return _github_download(GITHUB_DB_PATH)
+    elif backend == "drive":
+        return _drive_download(DRIVE_DB_NAME)
+    return None
+
+
+def _cloud_upload(data: dict) -> bool:
+    """Upload DB to whichever cloud backend is available."""
+    backend = _get_backend()
+    if backend == "github":
+        return _github_upload(GITHUB_DB_PATH, data)
+    elif backend == "drive":
+        return _drive_upload(DRIVE_DB_NAME, data)
+    return False
+
+
+def test_storage_connection() -> tuple[bool, str]:
+    """Test the active storage backend connection."""
+    backend = _get_backend()
+    if backend == "github":
+        return test_github_connection()
+    elif backend == "drive":
+        return test_drive_connection()
+    return False, "Kein Cloud-Speicher konfiguriert"
 
 
 def init_db():
     """Initialize database files and directories.
-    If Google Drive is available, sync from Drive on first load."""
+    If cloud storage is available, sync from cloud on first load."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     DOCS_PATH.mkdir(parents=True, exist_ok=True)
 
-    # Try to restore from Google Drive if local DB is missing or empty
+    # Try to restore from cloud if local DB is missing or empty
     if not DB_PATH.exists() or DB_PATH.stat().st_size < 10:
-        if is_drive_available():
-            print("[DB] Restoring from Google Drive...")
-            cloud_data = download_json(DRIVE_DB_NAME)
+        backend = _get_backend()
+        if backend:
+            print(f"[DB] Restoring from {backend}...")
+            cloud_data = _cloud_download()
             if cloud_data:
                 # Extract embedded documents to local files
                 _restore_embedded_documents(cloud_data)
                 save_db_local(cloud_data)
-                print(f"[DB] Restored from Google Drive! Jobs: {len(cloud_data.get('jobs', []))}, "
+                print(f"[DB] Restored from {backend}! Jobs: {len(cloud_data.get('jobs', []))}, "
                       f"Docs: {len(cloud_data.get('documents', {}))}, "
                       f"Settings: {list(cloud_data.get('settings', {}).keys())}")
                 return
             else:
-                print("[DB] WARNING: Drive available but download returned nothing!")
+                print(f"[DB] WARNING: {backend} available but download returned nothing!")
 
     if not DB_PATH.exists():
-        # CRITICAL: Only save locally, NEVER overwrite Drive with empty data!
+        # CRITICAL: Only save locally, NEVER overwrite cloud with empty data!
         save_db_local({"jobs": [], "settings": {}, "documents": {}})
 
 
@@ -78,7 +149,7 @@ def _restore_embedded_documents(db_data: dict):
 
 
 def save_db_local(data: dict):
-    """Save to local file only (no Drive sync)."""
+    """Save to local file only (no cloud sync)."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(DB_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2, default=str)
@@ -91,23 +162,24 @@ def load_db() -> dict:
 
 
 def save_db(data: dict):
-    """Save to local file and sync to Google Drive.
-    Safety: never overwrite Drive with empty data."""
+    """Save to local file and sync to cloud storage.
+    Safety: never overwrite cloud with empty data."""
     save_db_local(data)
 
-    # Sync to Drive — but NEVER upload empty data
-    if is_drive_available():
+    # Sync to cloud — but NEVER upload empty data
+    backend = _get_backend()
+    if backend:
         has_jobs = len(data.get("jobs", [])) > 0
         has_docs = len(data.get("documents", {})) > 0
         has_settings = len(data.get("settings", {})) > 0
 
         if has_jobs or has_docs or has_settings:
             try:
-                upload_json(DRIVE_DB_NAME, data)
+                _cloud_upload(data)
             except Exception as e:
-                print(f"[DB] Drive sync error: {e}")
+                print(f"[DB] Cloud sync error: {e}")
         else:
-            print("[DB] SKIPPED Drive sync — data is empty, refusing to overwrite")
+            print("[DB] SKIPPED cloud sync — data is empty, refusing to overwrite")
 
 
 def get_jobs() -> list:
@@ -160,7 +232,7 @@ def save_settings(settings: dict):
 def save_document(name: str, content: bytes, doc_type: str) -> tuple[bool, str]:
     """Save document locally and embed as base64 in the JSON database.
 
-    The base64 data travels with the JSON to Google Drive automatically.
+    The base64 data travels with the JSON to cloud storage automatically.
     No separate file upload needed!
 
     Returns (success, message) for UI feedback.
@@ -184,11 +256,11 @@ def save_document(name: str, content: bytes, doc_type: str) -> tuple[bool, str]:
     }
     save_db(db)
 
-    # Check if Drive sync worked
-    if is_drive_available():
-        return True, f"✅ '{name}' gespeichert und auf Drive gesichert ({len(content)} Bytes)"
+    backend = _get_backend()
+    if backend:
+        return True, f"✅ '{name}' gespeichert und via {backend.title()} gesichert ({len(content)} Bytes)"
     else:
-        return True, f"✅ '{name}' lokal gespeichert (Drive nicht verfügbar)"
+        return True, f"✅ '{name}' lokal gespeichert (kein Cloud-Speicher verfügbar)"
 
 
 def get_document(doc_type: str) -> dict | None:
