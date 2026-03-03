@@ -502,18 +502,64 @@ with tab1:
                     unique_results.append(job)
 
             # ── Relevance filter: remove jobs that don't match search terms ──
-            search_keywords = set()
+            # Keep important short keywords like IT, ERP, SAP, BI, etc.
+            IMPORTANT_SHORT_WORDS = {"it", "bi", "erp", "sap", "ax", "fi", "co", "pm", "ki", "ai"}
+            # Generic words that alone are too broad (must be paired with a domain keyword)
+            GENERIC_WORDS = {
+                "projektleiter", "projektleiterin", "consultant", "berater", "beraterin",
+                "manager", "managerin", "analyst", "analystin", "leiter", "leiterin",
+                "engineer", "head", "coach", "master", "owner", "specialist", "spezialist",
+            }
+
+            # Build per-search-term keyword sets (for compound matching)
+            search_term_words = []
             for t in search_terms:
+                words = set()
                 for word in t.lower().split():
-                    if len(word) > 2:  # skip short words
-                        search_keywords.add(word)
+                    if len(word) > 2 or word in IMPORTANT_SHORT_WORDS:
+                        words.add(word)
+                if words:
+                    search_term_words.append(words)
+
+            # All keywords flat (for quick lookup)
+            all_keywords = set()
+            for words in search_term_words:
+                all_keywords.update(words)
+            domain_keywords = all_keywords - GENERIC_WORDS
+
+            import re as _re
+
+            def _word_match(keyword, text):
+                """Check if keyword appears as a whole word (not substring) in text."""
+                return bool(_re.search(r'(?<![a-zäöü])' + _re.escape(keyword) + r'(?![a-zäöü])', text))
 
             filtered_results = []
             removed_count = 0
             for job in unique_results:
                 title_lower = job.get("title", "").lower()
-                # Job must contain at least one search keyword in the title
-                if any(kw in title_lower for kw in search_keywords):
+                company_lower = job.get("company", "").lower()
+                searchable = title_lower + " " + company_lower
+
+                # Strategy: job must match at least one full search term
+                # (= at least one domain keyword + one generic, OR just a domain keyword)
+                matched = False
+                for term_words in search_term_words:
+                    term_domain = term_words - GENERIC_WORDS
+                    term_generic = term_words & GENERIC_WORDS
+
+                    if term_domain:
+                        # Must match at least one domain keyword as whole word
+                        has_domain = any(_word_match(kw, searchable) for kw in term_domain)
+                        if has_domain:
+                            matched = True
+                            break
+                    elif term_generic:
+                        # Only generic words (e.g. "Scrum Master") — require all words
+                        if all(_word_match(kw, searchable) for kw in term_generic):
+                            matched = True
+                            break
+
+                if matched:
                     filtered_results.append(job)
                 else:
                     removed_count += 1
