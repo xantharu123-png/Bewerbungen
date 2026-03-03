@@ -19,7 +19,7 @@ from database import test_storage_connection
 from ai_assistant import (
     extract_text_from_pdf, extract_text_from_docx,
     generate_cover_letter, generate_cover_letter_pdf, calculate_match_score,
-    calculate_quick_score, _sanitize_company
+    calculate_quick_score, _sanitize_company, extract_company_details
 )
 
 # ─────────────────────────────────────────────
@@ -704,6 +704,13 @@ with tab1:
                             st.session_state.selected_job_for_ai = job
                             st.session_state[f"generating_{i}"] = False
                         else:
+                            # Step 1b: Extract company details (address + contact)
+                            with st.spinner("🔍 Extrahiere Firmendetails..."):
+                                company_details = extract_company_details(job.get("company", ""), job_desc)
+                                if company_details.get("contact_person") and not contact_person:
+                                    contact_person = company_details["contact_person"]
+                                company_address = company_details.get("company_address", "")
+
                             # Step 2: Generate cover letter
                             with st.spinner("✍️ KI generiert Anschreiben... (ca. 15-30 Sek.)"):
                                 try:
@@ -715,9 +722,12 @@ with tab1:
                                         existing_letter=st.session_state.get("cover_letter_text", ""),
                                         language="de",
                                         contact_person=contact_person,
+                                        company_address=company_address,
                                     )
                                     st.session_state[f"letter_{i}"] = letter
                                     st.session_state[f"contact_email_{i}"] = contact_email
+                                    st.session_state[f"contact_person_{i}"] = contact_person
+                                    st.session_state[f"company_address_{i}"] = company_address
                                     st.session_state[f"generating_{i}"] = False
                                     st.success("✅ Anschreiben generiert!")
                                 except Exception as e:
@@ -736,7 +746,8 @@ with tab1:
                                 letter_text,
                                 job_title=job.get('title', ''),
                                 company=job.get('company', ''),
-                                contact_person=contact_person,
+                                contact_person=st.session_state.get(f"contact_person_{i}", ""),
+                                company_address=st.session_state.get(f"company_address_{i}", ""),
                             )
                             company_clean = _sanitize_company(job.get('company', 'Firma')).replace(' ', '_').replace('/', '-')[:40]
                             pdf_filename = f"Anschreiben_{company_clean}.pdf"
@@ -1264,11 +1275,19 @@ with tab4:
         # Get contact info if available
         ai_contact = ""
         ai_contact_email = ""
+        ai_company_address = ""
         if selected_job:
             ai_contact = st.session_state.get(f"ai_contact_{selected_job.get('id', '')}", "")
             ai_contact_email = st.session_state.get(f"ai_contact_email_{selected_job.get('id', '')}", "")
 
-        with st.spinner("KI generiert Anschreiben... (ca. 15-30 Sekunden)"):
+        # Extract company details (address + contact person)
+        with st.spinner("🔍 Extrahiere Firmendetails..."):
+            company_info = extract_company_details(ai_company, ai_job_desc)
+            if company_info.get("contact_person") and not ai_contact:
+                ai_contact = company_info["contact_person"]
+            ai_company_address = company_info.get("company_address", "")
+
+        with st.spinner("✍️ KI generiert Anschreiben... (ca. 15-30 Sekunden)"):
             try:
                 result = generate_cover_letter(
                     job_title=ai_title,
@@ -1278,9 +1297,12 @@ with tab4:
                     existing_letter=st.session_state.cover_letter_text,
                     language=lang_code,
                     contact_person=ai_contact,
+                    company_address=ai_company_address,
                 )
                 st.session_state["generated_letter"] = result
                 st.session_state["generated_letter_email"] = ai_contact_email
+                st.session_state["generated_letter_contact"] = ai_contact
+                st.session_state["generated_letter_address"] = ai_company_address
                 st.success("✅ Anschreiben generiert!")
             except Exception as e:
                 st.error(f"Fehler: {e}")
@@ -1350,7 +1372,8 @@ with tab4:
                 letter_text,
                 job_title=ai_title,
                 company=ai_company,
-                contact_person=ai_contact,
+                contact_person=st.session_state.get("generated_letter_contact", ai_contact),
+                company_address=st.session_state.get("generated_letter_address", ""),
             )
             company_clean = _sanitize_company(ai_company).replace(' ', '_').replace('/', '-')[:40] if ai_company else "Firma"
             pdf_filename = f"Anschreiben_{company_clean}.pdf"

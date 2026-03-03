@@ -74,6 +74,50 @@ def extract_text_from_docx(docx_bytes: bytes) -> str:
     except Exception as e:
         return f"[Fehler beim DOCX-Lesen: {e}]"
 
+def extract_company_details(company: str, job_description: str) -> dict:
+    """Extract company address and contact person from job description using Claude.
+
+    Returns dict with keys: contact_person, company_address
+    """
+    clean_company = _sanitize_company(company)
+    if not clean_company:
+        return {"contact_person": "", "company_address": ""}
+
+    try:
+        client = _get_client()
+        prompt = f"""Aus der folgenden Stellenanzeige: extrahiere bitte:
+1. Die **Kontaktperson** (Name der zuständigen Person für Bewerbungen, z.B. "Frau Anna Müller")
+2. Die **Firmenadresse** des Unternehmens "{clean_company}" (Strasse + PLZ Ort, z.B. "Musterstrasse 10\\n8005 Zürich")
+
+Stellenanzeige:
+{job_description[:2500]}
+
+Antworte NUR mit einem JSON-Objekt:
+{{"contact_person": "Frau/Herr Vorname Nachname oder leer", "company_address": "Strasse Nr\\nPLZ Ort oder leer"}}
+
+Wenn die Info NICHT in der Anzeige steht, gib einen leeren String zurück. Erfinde NICHTS."""
+
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        import json as _json
+        text = message.content[0].text.strip()
+        json_match = __import__('re').search(r'\{.*\}', text, __import__('re').DOTALL)
+        if json_match:
+            result = _json.loads(json_match.group(0))
+            return {
+                "contact_person": result.get("contact_person", ""),
+                "company_address": result.get("company_address", ""),
+            }
+    except Exception as e:
+        print(f"[AI] extract_company_details error: {e}")
+
+    return {"contact_person": "", "company_address": ""}
+
+
 def generate_cover_letter(
     job_title: str,
     company: str,
@@ -395,6 +439,12 @@ def generate_cover_letter_pdf(
             run.text = ""
         first_run.text = new_text
 
+    def _force_arial_11(p):
+        """Force all runs in paragraph to Arial 11pt."""
+        for run in p.runs:
+            run.font.name = "Arial"
+            run.font.size = Pt(11)
+
     def set_tab_para(p, right_text):
         """Set text for a paragraph that uses [TAB]right_text format."""
         if not p.runs:
@@ -519,6 +569,10 @@ def generate_cover_letter_pdf(
     # P30: "Freundliche Grüsse" — keep as is
     # P31: "Miroslav Mikulic" — keep as is
 
+    # ── Force Arial 11pt on all paragraphs ──
+    for p in paras:
+        _force_arial_11(p)
+
     # ── Save modified DOCX to temp file ──
     with tempfile.TemporaryDirectory() as tmpdir:
         docx_path = os.path.join(tmpdir, "letter.docx")
@@ -585,14 +639,37 @@ def _generate_cover_letter_pdf_fallback(
         leftMargin=left_m, rightMargin=right_m,
     )
 
+    # Register Arial if available on the system (Windows: C:\Windows\Fonts)
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    _font_name = "Helvetica"
+    _font_name_bold = "Helvetica-Bold"
+    try:
+        import platform
+        if platform.system() == "Windows":
+            pdfmetrics.registerFont(TTFont("Arial", r"C:\Windows\Fonts\arial.ttf"))
+            pdfmetrics.registerFont(TTFont("Arial-Bold", r"C:\Windows\Fonts\arialbd.ttf"))
+            _font_name = "Arial"
+            _font_name_bold = "Arial-Bold"
+        else:
+            # Try common Linux paths
+            for arial_path in ["/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+                               "/usr/share/fonts/truetype/arial.ttf"]:
+                if os.path.exists(arial_path):
+                    pdfmetrics.registerFont(TTFont("Arial", arial_path))
+                    _font_name = "Arial"
+                    break
+    except Exception:
+        pass  # Fallback to Helvetica
+
     # Styles
-    s = ParagraphStyle("N", fontName="Helvetica", fontSize=11, leading=14,
+    s = ParagraphStyle("N", fontName=_font_name, fontSize=11, leading=14,
                        alignment=TA_LEFT, spaceAfter=6)
-    s_right = ParagraphStyle("R", fontName="Helvetica", fontSize=11, leading=14,
+    s_right = ParagraphStyle("R", fontName=_font_name, fontSize=11, leading=14,
                              alignment=TA_RIGHT, spaceAfter=6)
-    s_bold = ParagraphStyle("B", fontName="Helvetica-Bold", fontSize=11, leading=14,
+    s_bold = ParagraphStyle("B", fontName=_font_name_bold, fontSize=11, leading=14,
                             alignment=TA_LEFT, spaceAfter=6)
-    s_bullet = ParagraphStyle("BUL", fontName="Helvetica", fontSize=11, leading=14,
+    s_bullet = ParagraphStyle("BUL", fontName=_font_name, fontSize=11, leading=14,
                               alignment=TA_LEFT, spaceAfter=4,
                               leftIndent=14, firstLineIndent=-14)
 
