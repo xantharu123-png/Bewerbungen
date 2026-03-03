@@ -460,12 +460,13 @@ with tab1:
         st.markdown("<br>", unsafe_allow_html=True)
         run_search = st.button("🚀 Suche starten", use_container_width=True, type="primary")
 
-    # Info about selection
+    # Info about selection and sources
     if selected_profiles or custom_search:
         all_terms = list(selected_profiles)
         if custom_search.strip():
             all_terms.append(custom_search.strip())
         st.caption(f"🔎 {len(all_terms)} Suchbegriff(e) ausgewählt — jeder wird einzeln gesucht")
+    st.caption("📡 Quellen: [jobs.ch](https://www.jobs.ch) — weitere Plattformen in Planung")
 
     if run_search:
         # Build search terms from selected profiles + custom
@@ -499,12 +500,38 @@ with tab1:
                     seen_urls.add(job["url"])
                     unique_results.append(job)
 
-            st.session_state.search_results = unique_results
+            # ── Relevance filter: remove jobs that don't match search terms ──
+            search_keywords = set()
+            for t in search_terms:
+                for word in t.lower().split():
+                    if len(word) > 2:  # skip short words
+                        search_keywords.add(word)
 
-            if unique_results:
-                st.success(f"✅ {len(unique_results)} Stellen gefunden! ({len(all_results) - len(unique_results)} Duplikate entfernt)")
+            filtered_results = []
+            removed_count = 0
+            for job in unique_results:
+                title_lower = job.get("title", "").lower()
+                # Job must contain at least one search keyword in the title
+                if any(kw in title_lower for kw in search_keywords):
+                    filtered_results.append(job)
+                else:
+                    removed_count += 1
+
+            st.session_state.search_results = filtered_results
+
+            if filtered_results:
+                dup_count = len(all_results) - len(unique_results)
+                msg = f"✅ {len(filtered_results)} relevante Stellen gefunden!"
+                if dup_count > 0 or removed_count > 0:
+                    details = []
+                    if dup_count > 0:
+                        details.append(f"{dup_count} Duplikate (gleiche Stelle, mehrere Suchbegriffe)")
+                    if removed_count > 0:
+                        details.append(f"{removed_count} irrelevante entfernt")
+                    msg += f" ({', '.join(details)})"
+                st.success(msg)
             else:
-                st.warning("Keine Stellen gefunden. Versuche andere Jobprofile.")
+                st.warning("Keine relevanten Stellen gefunden. Versuche andere Jobprofile.")
     
     # Manual job entry
     with st.expander("➕ Stelle manuell hinzufügen"):
