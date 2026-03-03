@@ -24,11 +24,21 @@ def _get_config() -> dict:
     # Try Streamlit secrets first
     try:
         import streamlit as st
-        config["token"] = st.secrets.get("GITHUB_TOKEN", "")
-        config["repo"] = st.secrets.get("GITHUB_REPO", "")
-        config["branch"] = st.secrets.get("GITHUB_BRANCH", "main")
-    except Exception:
-        pass
+        secrets = st.secrets
+        try:
+            config["token"] = secrets["GITHUB_TOKEN"]
+        except (KeyError, AttributeError):
+            config["token"] = ""
+        try:
+            config["repo"] = secrets["GITHUB_REPO"]
+        except (KeyError, AttributeError):
+            config["repo"] = ""
+        try:
+            config["branch"] = secrets["GITHUB_BRANCH"]
+        except (KeyError, AttributeError):
+            config["branch"] = "main"
+    except Exception as e:
+        print(f"[GitHub] Secrets load error: {e}")
 
     # Fallback to environment
     if not config.get("token"):
