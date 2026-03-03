@@ -168,6 +168,7 @@ def generate_cover_letter(
 - Relevante Erfahrungen/Kompetenzen für DIESE Stelle hervorheben
 - Firmenname und Stellentitel anpassen
 - Anrede anpassen
+- **WICHTIG:** Lies die Stellenanzeige genau und identifiziere 1-2 spezifische Anforderungen oder Aufgaben, die der Bewerber laut CV erfüllt. Baue diese als zusätzliche Aufzählungspunkte ein (z.B. "Erfahrung in Pre-Sales Aktivitäten und Kunden-Workshops" oder "Kenntnisse in Schnittstellen-Entwicklung und Datenbanktechnologien"). So erkennt sich das Unternehmen im Anschreiben wieder.
 
 **VORLAGE (diese Struktur und Stil EXAKT beibehalten):**
 ---
@@ -213,6 +214,7 @@ Beschreibung: {job_description[:2000]}
 - [Stärke 2 mit konkretem Bezug zum Lebenslauf]
 - [Stärke 3 mit relevanter Erfahrung]
 - [Stärke 4 falls passend]
+- [INSERATS-MATCH: 1-2 spezifische Anforderungen aus der Stellenanzeige, die der Bewerber laut CV erfüllt — z.B. "Erfahrung in Pre-Sales und Kunden-Workshops durch langjährige Tätigkeit als Senior Consultant"]
 
 [Schluss: 2-3 Sätze mit Motivation und Gesprächswunsch]
 
@@ -224,10 +226,11 @@ Miroslav Mikulic
 - Schreibe NUR die Absätze zwischen Anrede und Gruss — KEIN Briefkopf, KEINE Adresse, KEIN Datum, KEIN Betreff
 - Beginne direkt mit "{greeting}"
 - Ende mit "Freundliche Grüsse" und dann "Miroslav Mikulic"
-- Die Aufzählung mit "- " am Zeilenanfang, 3-5 Punkte
+- Die Aufzählung mit "- " am Zeilenanfang, 4-6 Punkte
 - Professioneller, selbstbewusster Ton — schweizerisch
 - Keine Floskeln, keine Superlative
-- Aufzählungspunkte sollen konkret und auf die Stelle bezogen sein"""
+- Aufzählungspunkte sollen konkret und auf die Stelle bezogen sein
+- **WICHTIG:** Lies die Stellenanzeige genau und identifiziere 1-2 spezifische Anforderungen oder Aufgaben, die der Bewerber laut CV erfüllt. Baue diese als eigene Aufzählungspunkte ein, damit sich das Unternehmen im Anschreiben wiedererkennt (z.B. "Erfahrung in Pre-Sales Aktivitäten und Kunden-Workshops" oder "Hands-on-Mentalität durch eigenständige Projektführung bei BaseNet und Eurofins")"""
 
     message = client.messages.create(
         model="claude-opus-4-6",
