@@ -76,11 +76,16 @@ def _cloud_upload(data: dict) -> bool:
 
 
 def test_storage_connection() -> tuple[bool, str]:
-    """Test the active storage backend connection."""
-    backend = _get_backend()
-    if backend == "github":
+    """Test the active storage backend connection.
+
+    Always prefers GitHub over Drive since Drive can't upload (Service Account quota).
+    """
+    # Always check GitHub first, regardless of cached backend
+    if is_github_available():
         return test_github_connection()
-    elif backend == "drive":
+
+    backend = _get_backend()
+    if backend == "drive":
         return test_drive_connection()
     return False, "Kein Cloud-Speicher konfiguriert"
 

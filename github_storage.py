@@ -54,7 +54,12 @@ def _get_config() -> dict:
 def is_github_available() -> bool:
     """Check if GitHub storage is configured."""
     cfg = _get_config()
-    return bool(cfg.get("token") and cfg.get("repo"))
+    token = cfg.get("token", "")
+    repo = cfg.get("repo", "")
+    has_token = bool(token)
+    has_repo = bool(repo)
+    print(f"[GitHub] is_available check: token={'yes' if has_token else 'NO'} ({len(token)} chars), repo={'yes' if has_repo else 'NO'} ({repo})")
+    return has_token and has_repo
 
 
 def _headers() -> dict:
