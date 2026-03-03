@@ -85,17 +85,23 @@ def extract_company_details(company: str, job_description: str) -> dict:
 
     try:
         client = _get_client()
-        prompt = f"""Aus der folgenden Stellenanzeige: extrahiere bitte:
-1. Die **Kontaktperson** (Name der zuständigen Person für Bewerbungen, z.B. "Frau Anna Müller")
-2. Die **Firmenadresse** des Unternehmens "{clean_company}" (Strasse + PLZ Ort, z.B. "Musterstrasse 10\\n8005 Zürich")
+        prompt = f"""Aus der folgenden Stellenanzeige für "{clean_company}": extrahiere bitte:
+
+1. Die **Kontaktperson** (Name der zuständigen Person für Bewerbungen, z.B. "Frau Anna Müller").
+   - Suche nach Formulierungen wie "Kontakt:", "Ansprechperson:", "Fragen beantwortet", "bewirb dich bei" etc.
+   - Wenn KEINE Kontaktperson im Inserat steht, gib einen leeren String zurück.
+
+2. Die **Firmenadresse** des Unternehmens "{clean_company}" in der Schweiz.
+   - Suche zuerst im Inserat nach einer Adresse (Strasse + PLZ + Ort).
+   - Wenn KEINE Adresse im Inserat steht, verwende dein Wissen über den Schweizer Hauptsitz/Standort von "{clean_company}". Die Firmenadressen grosser Schweizer Unternehmen sind öffentlich bekannt.
+   - Format IMMER: "Strasse Nr\\nPLZ Ort" (z.B. "Schiffbaustrasse 2\\n8005 Zürich")
+   - Wenn du die Adresse weder im Inserat findest noch sicher kennst, gib einen leeren String zurück.
 
 Stellenanzeige:
 {job_description[:2500]}
 
 Antworte NUR mit einem JSON-Objekt:
-{{"contact_person": "Frau/Herr Vorname Nachname oder leer", "company_address": "Strasse Nr\\nPLZ Ort oder leer"}}
-
-Wenn die Info NICHT in der Anzeige steht, gib einen leeren String zurück. Erfinde NICHTS."""
+{{"contact_person": "Frau/Herr Vorname Nachname oder leer", "company_address": "Strasse Nr\\nPLZ Ort oder leer"}}"""
 
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -476,15 +482,33 @@ def generate_cover_letter_pdf(
     else:
         set_para_text(paras[3], f"079 602 83 31\t{clean_company or ''}")
 
-    # P4: [TAB] Address line 1 (contact person or empty)
-    set_tab_para(paras[4], contact_person or "")
-    # P5: [TAB] Address line 2
-    addr_line_2 = ""
+    # P4-P5: Company address lines (right-aligned via tab)
+    # Split address into parts: e.g. "Musterstr. 10\n8005 Zürich" → ["Musterstr. 10", "8005 Zürich"]
+    addr_parts = []
     if company_address:
         addr_parts = [l.strip() for l in company_address.strip().split("\n") if l.strip()]
-        if addr_parts:
-            addr_line_2 = addr_parts[0]
-    set_tab_para(paras[5], addr_line_2)
+
+    if contact_person and len(addr_parts) >= 2:
+        # Contact person + 2 address lines = 3 items, but only 2 slots (P4, P5)
+        # Combine: P4 = contact person, P5 = "Strasse Nr, PLZ Ort"
+        set_tab_para(paras[4], contact_person)
+        set_tab_para(paras[5], ", ".join(addr_parts))
+    elif contact_person and len(addr_parts) == 1:
+        set_tab_para(paras[4], contact_person)
+        set_tab_para(paras[5], addr_parts[0])
+    elif contact_person:
+        set_tab_para(paras[4], contact_person)
+        set_tab_para(paras[5], "")
+    elif len(addr_parts) >= 2:
+        # No contact person: P4 = Strasse, P5 = PLZ Ort
+        set_tab_para(paras[4], addr_parts[0])
+        set_tab_para(paras[5], addr_parts[1])
+    elif len(addr_parts) == 1:
+        set_tab_para(paras[4], "")
+        set_tab_para(paras[5], addr_parts[0])
+    else:
+        set_tab_para(paras[4], "")
+        set_tab_para(paras[5], "")
 
     # P7: [TAB] Date
     date_str = f"Gerlikon, {datetime.now().strftime('%d.%m.%Y')}"
