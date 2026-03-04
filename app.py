@@ -32,6 +32,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+def _email_body(contact_person: str = "") -> str:
+    """Build email body text with correct greeting."""
+    if contact_person:
+        greeting = f"Sehr geehrte/r {contact_person}"
+    else:
+        greeting = "Sehr geehrte Damen und Herren"
+    return f"{greeting},\n\nAnbei meine Unterlagen für die Traumvakanz.\n\nIch freue mich auf Ihren Anruf.\n\nFreundliche Grüsse\nMiroslav Mikulic"
+
+
 # ─────────────────────────────────────────────
 # CSS
 # ─────────────────────────────────────────────
@@ -756,7 +765,7 @@ with tab1:
                         # ── Email recipient ──
                         to_email = st.session_state.get(f"contact_email_{i}", "")
                         subject = f"Bewerbung: {job.get('title', '')}" + (f" — {job.get('company', '')}" if job.get('company') else "")
-                        body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{job.get('title', '')}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n- Arbeitszeugnisse\n\nFreundliche Grüsse\nMiroslav Mikulic"
+                        body_text = _email_body(st.session_state.get(f"contact_person_{i}", ""))
 
                         # ── Recipient email input ──
                         send_to = st.text_input(
@@ -912,7 +921,7 @@ with tab1:
                                 with col_gmail:
                                     import urllib.parse as _urlparse
                                     _subj = _urlparse.quote(f"Bewerbung: {job.get('title', '')}" + (f" — {job.get('company', '')}" if job.get('company') else ""))
-                                    _body = _urlparse.quote(f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{job.get('title', '')}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n- Arbeitszeugnisse\n\nFreundliche Grüsse\nMiroslav Mikulic")
+                                    _body = _urlparse.quote(_email_body(contact_person))
                                     _to = _urlparse.quote(contact_email) if contact_email else ""
                                     _gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={_to}&su={_subj}&body={_body}"
                                     st.markdown(
@@ -1528,7 +1537,7 @@ with tab4:
         subject = f"Bewerbung: {ai_title}" + (f" — {ai_company}" if ai_company else "")
         to_email = st.session_state.get("generated_letter_email", "")
         subject_encoded = urllib.parse.quote(subject)
-        body_text = f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{ai_title}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n- Arbeitszeugnisse\n\nFreundliche Grüsse\nMiroslav Mikulic"
+        body_text = _email_body(st.session_state.get("generated_letter_contact", ""))
         body_encoded = urllib.parse.quote(body_text)
         gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1"
         if to_email:
