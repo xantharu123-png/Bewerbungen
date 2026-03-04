@@ -98,7 +98,7 @@ def extract_company_details(company: str, job_description: str) -> dict:
    - Wenn du die Adresse weder im Inserat findest noch sicher kennst, gib einen leeren String zurück.
 
 Stellenanzeige:
-{job_description[:2500]}
+{job_description[:4000]}
 
 Antworte NUR mit einem JSON-Objekt:
 {{"contact_person": "Frau/Herr Vorname Nachname oder leer", "company_address": "Strasse Nr\\nPLZ Ort oder leer"}}"""

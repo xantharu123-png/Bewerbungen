@@ -698,6 +698,7 @@ with tab1:
                                 job["company"] = details["company"]
                             contact_person = details.get("contact", "")
                             contact_email = details.get("email", "")
+                            scraper_address = details.get("address", "")
 
                         if not job_desc:
                             st.warning("Konnte Stellenbeschreibung nicht laden. Bitte manuell im Tab 'KI-Anschreiben' eingeben.")
@@ -709,7 +710,8 @@ with tab1:
                                 company_details = extract_company_details(job.get("company", ""), job_desc)
                                 if company_details.get("contact_person") and not contact_person:
                                     contact_person = company_details["contact_person"]
-                                company_address = company_details.get("company_address", "")
+                                # Address priority: scraper regex > AI extraction
+                                company_address = scraper_address or company_details.get("company_address", "")
 
                             # Step 2: Generate cover letter
                             with st.spinner("✍️ KI generiert Anschreiben... (ca. 15-30 Sek.)"):
@@ -1210,6 +1212,8 @@ with tab4:
                         # Store contact info
                         st.session_state[contact_key] = details.get("contact", "")
                         st.session_state[contact_email_key] = details.get("email", "")
+                        if details.get("address"):
+                            st.session_state[f"scraper_address_{selected_job.get('id', '')}"] = details["address"]
                     else:
                         st.session_state[job_desc_key] = ""
 
@@ -1299,11 +1303,15 @@ with tab4:
             ai_contact_email = st.session_state.get(f"ai_contact_email_{selected_job.get('id', '')}", "")
 
         # Extract company details (address + contact person)
+        scraper_addr = ""
+        if selected_job:
+            scraper_addr = st.session_state.get(f"scraper_address_{selected_job.get('id', '')}", "")
         with st.spinner("🔍 Extrahiere Firmendetails..."):
             company_info = extract_company_details(ai_company, ai_job_desc)
             if company_info.get("contact_person") and not ai_contact:
                 ai_contact = company_info["contact_person"]
-            ai_company_address = company_info.get("company_address", "")
+            # Address priority: scraper regex > AI extraction
+            ai_company_address = scraper_addr or company_info.get("company_address", "")
 
         with st.spinner("✍️ KI generiert Anschreiben... (ca. 15-30 Sekunden)"):
             try:

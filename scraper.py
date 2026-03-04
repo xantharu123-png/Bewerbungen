@@ -225,11 +225,19 @@ def get_job_details(url: str) -> dict:
             if og_company:
                 company = og_company.get("content", "")[:100]
 
-        # Extract contact info
+        # Extract contact info — search multiple patterns
         contact = ""
-        contact_match = re.search(r"(?:Kontakt|Bewerbungen an|Ansprechperson)[:\s]*([^\n]+)", description, re.I)
-        if contact_match:
-            contact = contact_match.group(1).strip()
+        contact_patterns = [
+            r"(?:Kontakt|Kontaktperson|Ansprechperson|Ansprechpartner(?:in)?|Bewerbungen an|Deine Ansprechperson|Ihre Ansprechperson|Fragen beantwortet)[:\s]*([^\n]+)",
+            r"(?:Frau|Herr)\s+[A-ZÄÖÜ][a-zäöüé]+\s+[A-ZÄÖÜ][a-zäöüé]+",
+        ]
+        for pattern in contact_patterns:
+            contact_match = re.search(pattern, description, re.I)
+            if contact_match:
+                contact = contact_match.group(1).strip() if contact_match.lastindex else contact_match.group(0).strip()
+                # Clean up trailing junk
+                contact = re.sub(r"[,\.]$", "", contact).strip()
+                break
 
         # Extract email
         email = ""
@@ -237,11 +245,21 @@ def get_job_details(url: str) -> dict:
         if email_match:
             email = email_match.group(0)
 
+        # Extract address (look for Swiss PLZ pattern near company info)
+        address = ""
+        addr_match = re.search(
+            r"([A-ZÄÖÜ][a-zäöüé]+(?:strasse|str\.|weg|gasse|platz|allee|rain|matte)\s+\d+[a-z]?)\s*[,\n]\s*(\d{4}\s+[A-ZÄÖÜ][a-zäöüé]+(?:\s+[A-ZÄÖÜ][a-zäöüé]+)?)",
+            description
+        )
+        if addr_match:
+            address = f"{addr_match.group(1)}\n{addr_match.group(2)}"
+
         return {
-            "description": description[:3000],
+            "description": description[:5000],
             "company": company,
             "contact": contact,
             "email": email,
+            "address": address,
         }
     except Exception as e:
         print(f"Error fetching job details from {url}: {e}")
