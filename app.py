@@ -422,7 +422,7 @@ with tab1:
     with col_days:
         days_filter = st.number_input(
             "Tage zurück",
-            min_value=1, max_value=60, value=7,
+            min_value=1, max_value=60, value=get_settings().get("default_days", 7),
             key="days_filter_input"
         )
 
