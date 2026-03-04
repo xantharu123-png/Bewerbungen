@@ -104,20 +104,26 @@ Antworte NUR mit einem JSON-Objekt:
 {{"contact_person": "Frau/Herr Vorname Nachname oder leer", "company_address": "Strasse Nr\\nPLZ Ort oder leer"}}"""
 
         message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=300,
             messages=[{"role": "user", "content": prompt}]
         )
 
         import json as _json
         text = message.content[0].text.strip()
+        print(f"[AI] extract_company_details raw response: {text[:300]}")
         json_match = __import__('re').search(r'\{.*\}', text, __import__('re').DOTALL)
         if json_match:
             result = _json.loads(json_match.group(0))
+            contact = result.get("contact_person", "")
+            address = result.get("company_address", "")
+            print(f"[AI] Extracted: contact='{contact}', address='{address}'")
             return {
-                "contact_person": result.get("contact_person", ""),
-                "company_address": result.get("company_address", ""),
+                "contact_person": contact,
+                "company_address": address,
             }
+        else:
+            print(f"[AI] WARNING: No JSON found in response")
     except Exception as e:
         print(f"[AI] extract_company_details error: {e}")
 
@@ -483,10 +489,16 @@ def generate_cover_letter_pdf(
         set_para_text(paras[3], f"079 602 83 31\t{clean_company or ''}")
 
     # P4-P5: Company address lines (right-aligned via tab)
-    # Split address into parts: e.g. "Musterstr. 10\n8005 Zürich" → ["Musterstr. 10", "8005 Zürich"]
+    # Split address: "Musterstr. 10\n8005 Zürich" or "Musterstr. 10, 8005 Zürich"
     addr_parts = []
     if company_address:
-        addr_parts = [l.strip() for l in company_address.strip().split("\n") if l.strip()]
+        # Support both newline and comma as separator
+        if "\n" in company_address:
+            addr_parts = [l.strip() for l in company_address.strip().split("\n") if l.strip()]
+        elif ", " in company_address:
+            addr_parts = [l.strip() for l in company_address.strip().split(", ") if l.strip()]
+        else:
+            addr_parts = [company_address.strip()]
 
     if contact_person and len(addr_parts) >= 2:
         # Contact person + 2 address lines = 3 items, but only 2 slots (P4, P5)

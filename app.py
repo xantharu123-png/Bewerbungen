@@ -740,14 +740,32 @@ with tab1:
                     with st.expander(f"✉️ Anschreiben für «{job['title']}»", expanded=True):
                         st.text_area("", value=letter_text, height=300, key=f"letter_text_{i}")
 
-                        # Generate PDF
+                        # ── Editable company details for PDF ──
+                        st.markdown("**📬 Empfänger-Adresse im PDF:**")
+                        col_cp, col_addr = st.columns(2)
+                        with col_cp:
+                            edit_contact = st.text_input(
+                                "Kontaktperson",
+                                value=st.session_state.get(f"contact_person_{i}", ""),
+                                placeholder="z.B. Frau Anna Müller",
+                                key=f"edit_contact_{i}",
+                            )
+                        with col_addr:
+                            edit_address = st.text_input(
+                                "Firmenadresse (Strasse, PLZ Ort)",
+                                value=st.session_state.get(f"company_address_{i}", ""),
+                                placeholder="z.B. Hauptstrasse 25, 8500 Frauenfeld",
+                                key=f"edit_address_{i}",
+                            )
+
+                        # Generate PDF with possibly edited values
                         try:
                             pdf_bytes = generate_cover_letter_pdf(
                                 letter_text,
                                 job_title=job.get('title', ''),
                                 company=job.get('company', ''),
-                                contact_person=st.session_state.get(f"contact_person_{i}", ""),
-                                company_address=st.session_state.get(f"company_address_{i}", ""),
+                                contact_person=edit_contact,
+                                company_address=edit_address,
                             )
                             company_clean = _sanitize_company(job.get('company', 'Firma')).replace(' ', '_').replace('/', '-')[:40]
                             pdf_filename = f"Anschreiben_{company_clean}.pdf"
@@ -1366,14 +1384,32 @@ with tab4:
             height=400
         )
 
-        # Generate PDF
+        # ── Editable company details for PDF ──
+        st.markdown("**📬 Empfänger-Adresse im PDF:**")
+        col_cp4, col_addr4 = st.columns(2)
+        with col_cp4:
+            edit_contact_t4 = st.text_input(
+                "Kontaktperson",
+                value=st.session_state.get("generated_letter_contact", ai_contact),
+                placeholder="z.B. Frau Anna Müller",
+                key="edit_contact_tab4",
+            )
+        with col_addr4:
+            edit_address_t4 = st.text_input(
+                "Firmenadresse (Strasse, PLZ Ort)",
+                value=st.session_state.get("generated_letter_address", ""),
+                placeholder="z.B. Hauptstrasse 25, 8500 Frauenfeld",
+                key="edit_address_tab4",
+            )
+
+        # Generate PDF with possibly edited values
         try:
             pdf_bytes = generate_cover_letter_pdf(
                 letter_text,
                 job_title=ai_title,
                 company=ai_company,
-                contact_person=st.session_state.get("generated_letter_contact", ai_contact),
-                company_address=st.session_state.get("generated_letter_address", ""),
+                contact_person=edit_contact_t4,
+                company_address=edit_address_t4,
             )
             company_clean = _sanitize_company(ai_company).replace(' ', '_').replace('/', '-')[:40] if ai_company else "Firma"
             pdf_filename = f"Anschreiben_{company_clean}.pdf"
