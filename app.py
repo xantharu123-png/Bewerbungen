@@ -900,13 +900,25 @@ with tab1:
                                     company_address=company_address,
                                 )
                                 company_clean = _sanitize_company(job.get("company", "Firma")).replace(" ", "_").replace("/", "-")[:40]
-                                st.download_button(
-                                    f"📄 PDF herunterladen — {company_clean}",
-                                    data=pdf_bytes,
-                                    file_name=f"Anschreiben_{company_clean}.pdf",
-                                    mime="application/pdf",
-                                    key=f"batch_pdf_{idx}",
-                                )
+                                col_pdf, col_gmail = st.columns(2)
+                                with col_pdf:
+                                    st.download_button(
+                                        f"📄 PDF herunterladen — {company_clean}",
+                                        data=pdf_bytes,
+                                        file_name=f"Anschreiben_{company_clean}.pdf",
+                                        mime="application/pdf",
+                                        key=f"batch_pdf_{idx}",
+                                    )
+                                with col_gmail:
+                                    import urllib.parse as _urlparse
+                                    _subj = _urlparse.quote(f"Bewerbung: {job.get('title', '')}" + (f" — {job.get('company', '')}" if job.get('company') else ""))
+                                    _body = _urlparse.quote(f"Sehr geehrte Damen und Herren,\n\nanbei sende ich Ihnen meine Bewerbungsunterlagen für die Stelle «{job.get('title', '')}».\n\nBitte finden Sie im Anhang:\n- Bewerbungsschreiben\n- Lebenslauf\n- Diplome & Zertifikate\n- Arbeitszeugnisse\n\nFreundliche Grüsse\nMiroslav Mikulic")
+                                    _to = _urlparse.quote(contact_email) if contact_email else ""
+                                    _gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={_to}&su={_subj}&body={_body}"
+                                    st.markdown(
+                                        f'<a href="{_gmail_url}" target="_blank" style="display:inline-block;background:#16a34a;color:white;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:0.85rem;margin-top:4px;">📧 Gmail Draft erstellen</a>',
+                                        unsafe_allow_html=True,
+                                    )
                                 st.success(f"✅ Anschreiben für «{job['title']}» erstellt!")
                             except Exception as e:
                                 st.error(f"Fehler bei «{job['title']}»: {e}")
