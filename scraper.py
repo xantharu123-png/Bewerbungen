@@ -189,6 +189,74 @@ def search_jobs_ch(keywords: list, regions: list = None, days_back: int = 30) ->
     return unique
 
 
+def _extract_jobs_ch_details(soup, html_text: str) -> dict:
+    """Extract job details from jobs.ch using JSON-LD and embedded JS data.
+
+    jobs.ch renders content via JavaScript, so normal HTML scraping gets almost nothing.
+    Instead we extract from:
+    1. JSON-LD (schema.org JobPosting) — description, company, address
+    2. Embedded JSON in HTML — contacts (firstName/lastName)
+    """
+    import json as _json
+
+    result = {"description": "", "company": "", "contact": "", "email": "", "address": ""}
+
+    # ── 1. JSON-LD: description, company, address ──
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = _json.loads(script.string or "")
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                if item.get("@type") != "JobPosting":
+                    continue
+
+                # Description (HTML → plain text)
+                raw_desc = item.get("description", "")
+                if raw_desc:
+                    desc_soup = BeautifulSoup(raw_desc, "html.parser")
+                    result["description"] = desc_soup.get_text("\n", strip=True)
+
+                # Company
+                org = item.get("hiringOrganization", {})
+                if isinstance(org, dict):
+                    result["company"] = org.get("name", "")
+
+                # Address from jobLocation
+                loc = item.get("jobLocation", {})
+                if isinstance(loc, dict):
+                    addr = loc.get("address", {})
+                    if isinstance(addr, dict):
+                        street = addr.get("streetAddress", "")
+                        plz = addr.get("postalCode", "")
+                        city = addr.get("addressLocality", "")
+                        if street and plz and city:
+                            result["address"] = f"{street}\n{plz} {city}"
+        except Exception:
+            continue
+
+    # ── 2. Embedded JSON: contacts ──
+    contacts_match = re.search(r'"contacts"\s*:\s*\[([^\]]+)\]', html_text)
+    if contacts_match:
+        try:
+            contacts = _json.loads(f"[{contacts_match.group(1)}]")
+            if contacts and isinstance(contacts[0], dict):
+                first = contacts[0].get("firstName", "")
+                last = contacts[0].get("lastName", "")
+                if first and last:
+                    result["contact"] = f"{first} {last}"
+                    print(f"[Scraper] jobs.ch Kontaktperson: {result['contact']}")
+        except Exception:
+            pass
+
+    # ── 3. Email from description text ──
+    if result["description"]:
+        email_match = re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", result["description"])
+        if email_match:
+            result["email"] = email_match.group(0)
+
+    return result
+
+
 def get_job_details(url: str) -> dict:
     """Fetch full job details from a job listing URL."""
     try:
@@ -197,8 +265,19 @@ def get_job_details(url: str) -> dict:
             return {}
 
         soup = BeautifulSoup(resp.text, "html.parser")
+        html_text = resp.text
 
-        # Extract main content
+        # ── jobs.ch: use specialized extractor ──
+        if "jobs.ch" in url:
+            result = _extract_jobs_ch_details(soup, html_text)
+            if result["description"]:
+                print(f"[Scraper] jobs.ch: desc={len(result['description'])} chars, "
+                      f"company='{result['company']}', contact='{result['contact']}', "
+                      f"address='{result['address']}'")
+                return result
+            # Fall through to generic if JSON-LD failed
+
+        # ── Generic scraper for other sites ──
         content_div = (
             soup.find("div", class_=re.compile(r"job.*detail|detail.*job|content|description", re.I))
             or soup.find("main")
@@ -211,15 +290,13 @@ def get_job_details(url: str) -> dict:
                 el.decompose()
             description = content_div.get_text("\n", strip=True)
 
-        # Extract company — be careful to get just the name, not a large wrapper
+        # Extract company
         company = ""
         company_el = soup.find(["span", "a"], class_=re.compile(r"company|employer|firma", re.I))
         if company_el:
             company_text = company_el.get_text(strip=True)
-            # Only use if it's a reasonable company name (not a huge block of text)
             if len(company_text) < 100:
                 company = company_text
-        # Fallback: try meta tags or og tags
         if not company:
             og_company = soup.find("meta", {"property": "og:site_name"})
             if og_company:
@@ -235,9 +312,23 @@ def get_job_details(url: str) -> dict:
             contact_match = re.search(pattern, description, re.I)
             if contact_match:
                 contact = contact_match.group(1).strip() if contact_match.lastindex else contact_match.group(0).strip()
-                # Clean up trailing junk
                 contact = re.sub(r"[,\.]$", "", contact).strip()
                 break
+
+        # Also check embedded JSON contacts (works for multiple platforms)
+        if not contact:
+            contacts_match = re.search(r'"contacts"\s*:\s*\[([^\]]+)\]', html_text)
+            if contacts_match:
+                try:
+                    import json as _json
+                    contacts = _json.loads(f"[{contacts_match.group(1)}]")
+                    if contacts and isinstance(contacts[0], dict):
+                        first = contacts[0].get("firstName", "")
+                        last = contacts[0].get("lastName", "")
+                        if first and last:
+                            contact = f"{first} {last}"
+                except Exception:
+                    pass
 
         # Extract email
         email = ""
@@ -245,7 +336,7 @@ def get_job_details(url: str) -> dict:
         if email_match:
             email = email_match.group(0)
 
-        # Extract address (look for Swiss PLZ pattern near company info)
+        # Extract address (Swiss PLZ pattern)
         address = ""
         addr_match = re.search(
             r"([A-ZÄÖÜ][a-zäöüé]+(?:strasse|str\.|weg|gasse|platz|allee|rain|matte)\s+\d+[a-z]?)\s*[,\n]\s*(\d{4}\s+[A-ZÄÖÜ][a-zäöüé]+(?:\s+[A-ZÄÖÜ][a-zäöüé]+)?)",
@@ -253,6 +344,28 @@ def get_job_details(url: str) -> dict:
         )
         if addr_match:
             address = f"{addr_match.group(1)}\n{addr_match.group(2)}"
+
+        # Also check JSON-LD for address (works on many platforms)
+        if not address:
+            for script in soup.find_all("script", type="application/ld+json"):
+                try:
+                    import json as _json
+                    data = _json.loads(script.string or "")
+                    items = data if isinstance(data, list) else [data]
+                    for item in items:
+                        if item.get("@type") != "JobPosting":
+                            continue
+                        loc = item.get("jobLocation", {})
+                        if isinstance(loc, dict):
+                            addr = loc.get("address", {})
+                            if isinstance(addr, dict):
+                                street = addr.get("streetAddress", "")
+                                plz = addr.get("postalCode", "")
+                                city = addr.get("addressLocality", "")
+                                if street and plz and city:
+                                    address = f"{street}\n{plz} {city}"
+                except Exception:
+                    continue
 
         return {
             "description": description[:5000],

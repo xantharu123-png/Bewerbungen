@@ -29,7 +29,7 @@ st.set_page_config(
     page_title="JobTracker Pro",
     page_icon="💼",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # ─────────────────────────────────────────────
@@ -288,37 +288,6 @@ if "search_results" not in st.session_state:
 if "selected_job_for_ai" not in st.session_state:
     st.session_state.selected_job_for_ai = None
 
-# ─────────────────────────────────────────────
-# Sidebar
-# ─────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("# 💼 JobTracker Pro")
-
-    # Cloud sync status
-    cloud_ok, cloud_msg = test_storage_connection()
-    if cloud_ok:
-        st.caption(f"☁️ {cloud_msg} — Daten bleiben erhalten")
-    else:
-        st.caption("⚠️ Kein Cloud-Speicher — Daten gehen bei Redeploy verloren!")
-
-    st.markdown("---")
-
-    # Quick stats
-    jobs = get_jobs()
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Stellen", len(jobs))
-    with col2:
-        applied = len([j for j in jobs if j["status"] == "Beworben"])
-        st.metric("Beworben", applied)
-
-    interviews = len([j for j in jobs if j["status"] == "Interview"])
-    rejections = len([j for j in jobs if j["status"] == "Absage"])
-    col3, col4 = st.columns(2)
-    with col3:
-        st.metric("Interviews", interviews)
-    with col4:
-        st.metric("Absagen", rejections)
 
 # ─────────────────────────────────────────────
 # Main Content
@@ -640,11 +609,20 @@ with tab1:
         # Sort by score descending
         results_with_scores.sort(key=lambda x: x[1], reverse=True)
 
+        # ── Batch selection: checkboxes + "Alle Anschreiben erstellen" button ──
+        selected_indices = []
+
         for i, (job, quick_score) in enumerate(results_with_scores):
             already_saved = job["url"] in existing_urls
 
             with st.container():
-                col_main, col_btn = st.columns([5, 1])
+                col_check, col_main, col_btn = st.columns([0.3, 5, 1])
+
+                with col_check:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    is_selected = st.checkbox("", key=f"select_{i}", label_visibility="collapsed")
+                    if is_selected:
+                        selected_indices.append(i)
 
                 with col_main:
                     saved_badge = ' <span style="background:#16a34a;color:white;padding:2px 8px;border-radius:10px;font-size:0.7rem;">✓ Gespeichert</span>' if already_saved else ""
@@ -861,6 +839,77 @@ with tab1:
                     count += 1
             st.success(f"✅ {count} neue Stellen gespeichert!")
             st.rerun()
+
+        # ── Batch cover letter generation ──
+        if selected_indices:
+            st.markdown("---")
+            st.markdown(f"**{len(selected_indices)} Stelle(n) ausgewählt**")
+            if st.button(f"✍️ Bewerbungsschreiben erstellen ({len(selected_indices)} Stellen)", type="primary", key="batch_generate"):
+                cv_text = st.session_state.get("cv_text", "")
+                if not cv_text:
+                    st.error("⚠️ Bitte zuerst deinen CV hochladen (Tab 'Unterlagen').")
+                else:
+                    for idx in selected_indices:
+                        job, _ = results_with_scores[idx]
+                        st.markdown(f"---")
+                        st.markdown(f"#### ✉️ {job['title']} — {job.get('company', '')}")
+
+                        with st.spinner(f"📥 Lade Inserat «{job['title']}»..."):
+                            details = get_job_details(job.get("url", ""))
+                            job_desc = details.get("description", "")
+                            contact_person = details.get("contact", "")
+                            contact_email = details.get("email", "")
+                            scraper_address = details.get("address", "")
+
+                        if not job_desc:
+                            st.warning(f"Konnte Beschreibung für «{job['title']}» nicht laden.")
+                            continue
+
+                        with st.spinner(f"🔍 Firmendetails für «{job.get('company', '')}»..."):
+                            company_details = extract_company_details(job.get("company", ""), job_desc)
+                            if company_details.get("contact_person") and not contact_person:
+                                contact_person = company_details["contact_person"]
+                            company_address = scraper_address or company_details.get("company_address", "")
+
+                        with st.spinner(f"✍️ Generiere Anschreiben für «{job['title']}»..."):
+                            try:
+                                letter = generate_cover_letter(
+                                    job_title=job.get("title", ""),
+                                    company=job.get("company", ""),
+                                    job_description=job_desc,
+                                    cv_text=cv_text,
+                                    existing_letter=st.session_state.get("cover_letter_text", ""),
+                                    language="de",
+                                    contact_person=contact_person,
+                                    company_address=company_address,
+                                )
+
+                                # Save job if not yet saved
+                                if job["url"] not in existing_urls:
+                                    save_job(job)
+                                    existing_urls.add(job["url"])
+
+                                st.text_area("", value=letter, height=250, key=f"batch_letter_{idx}")
+
+                                # Generate PDF
+                                pdf_bytes = generate_cover_letter_pdf(
+                                    letter,
+                                    job_title=job.get("title", ""),
+                                    company=job.get("company", ""),
+                                    contact_person=contact_person,
+                                    company_address=company_address,
+                                )
+                                company_clean = _sanitize_company(job.get("company", "Firma")).replace(" ", "_").replace("/", "-")[:40]
+                                st.download_button(
+                                    f"📄 PDF herunterladen — {company_clean}",
+                                    data=pdf_bytes,
+                                    file_name=f"Anschreiben_{company_clean}.pdf",
+                                    mime="application/pdf",
+                                    key=f"batch_pdf_{idx}",
+                                )
+                                st.success(f"✅ Anschreiben für «{job['title']}» erstellt!")
+                            except Exception as e:
+                                st.error(f"Fehler bei «{job['title']}»: {e}")
 
 # ═══════════════════════════════════════════
 # TAB 2: Application Tracker
