@@ -1728,12 +1728,13 @@ with tab6:
 
     # ── Info ──
     st.markdown("---")
+    _info_cloud_ok, _info_cloud_msg = test_storage_connection()
     st.markdown(
         '<div style="background:#fff8f0;border:1px solid #e5ddd0;border-radius:10px;padding:16px 20px;'
         'color:#7a6b56;font-size:0.82rem;">'
         '<strong>ℹ️ Über JobTracker Pro</strong><br>'
         'Absender-E-Mail: miroslav.mikulic@gmail.com<br>'
-        'Daten gespeichert via: ' + ('GitHub ☁️' if cloud_ok else 'Lokaler Speicher 💾') +
+        'Daten gespeichert via: ' + ('GitHub ☁️' if _info_cloud_ok else 'Lokaler Speicher 💾') +
         '</div>',
         unsafe_allow_html=True,
     )
